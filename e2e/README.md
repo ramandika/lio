@@ -16,6 +16,13 @@ npm run cy:run                         # headless, all journeys, screenshots on 
 npm run cy:open                        # interactive
 ```
 
+J3's L2 variants upload offers in unseen formats and extract them live with
+`llm_ocr_fuse` — the browser mock calls the local OpenAI-compatible server
+(default `http://localhost:11444/v1`, no API key) through the same-origin Vite
+proxy (`/llm → LLM_PROXY_TARGET`). The server must be running for those
+journey variants; the L1 happy path and the AI-off degradation run without it
+(set `VITE_LLM_TIER=off` to skip the live calls entirely).
+
 The base URL defaults to `http://localhost:5173`; when the frontend is wired
 to the real FastAPI stack, point it there instead:
 
@@ -40,7 +47,7 @@ CYPRESS_BASE_URL=http://localhost:8020 npm run cy:run
 |---------|------|-------|
 | J1 — Intake happy path | `cypress/e2e/j1-intake-happy-path.cy.js` | ✅ passing |
 | J2 — invalid submission rejected | `cypress/e2e/j2-intake-invalid-rejected.cy.js` | ✅ passing |
-| J3 — offer upload → auto-fill → submit | — | to do |
+| J3 — offer upload → auto-fill → submit | `cypress/e2e/j3-offer-upload-extract-submit.cy.js` | ✅ passing (L2 variants live: `llm_ocr_fuse` against the local LLM server) |
 | J4 — commodity suggestion | — | to do |
 | J5 — overview status & history | — | to do |
 | J6 — persistence across restarts | — | to do |

@@ -1,0 +1,21 @@
+Vendor Name: Global Tech Solutions
+Umsatzsteuer-Identifikationsnummer (VAT ID): DE987654321
+Offer Date: March 23, 2024
+
+Offered to: Creative Marketing Department
+
+Items Offered:
+1. Product: Adobe Photoshop License
+   Unit Price: €150
+   Quantity: 10
+   Total: €1500
+
+2. Product: Adobe Illustrator License
+   Unit Price: €120
+   Quantity: 5
+   Total: €600
+
+Total Offer Cost: €2100
+
+Terms and Conditions:
+Payment due within 30 days of invoice. Prices include applicable taxes.

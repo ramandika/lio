@@ -128,8 +128,8 @@ The suite stays fast and deterministic by mocking exactly one dependency:
 
 | Dependency | E2E behavior | How |
 |------------|-------------|-----|
-| Back-end API + DB | **Real** | The app under run, against a throwaway local DB |
-| OpenAI extraction/classification | **Mocked** | A fixture-driven LLM stand-in, selected by configuration at app start (e.g. response file per scenario), so journeys J3/J4 run without any API key |
+| Back-end API + DB | **Real** (until the FastAPI request endpoints land, the shipped frontend's in-browser mock API stands in for this) | The app under run, against a throwaway local DB |
+| OpenAI extraction/classification | **Mocked, with one live exception** | A fixture-driven LLM stand-in, selected by configuration at app start (e.g. response file per scenario), so journeys run without any API key. **J3's L2 variants are the exception:** they exercise the real `llm_ocr_fuse` against the local OpenAI-compatible server (`localhost:11444`, no API key) through the dev-server `/llm` proxy, per [PROJECT_PLAN.md, decision 15](PROJECT_PLAN.md) — so J3 partially refutes the "mocked" rule by running its unseen-format extraction on the real model and keeping the deterministic L1/AI-off variants offline. Once the backend lands, its server-side LLM comes back under the fixture/mock rule; the L1 `VITE_LLM_TIER=off` variants always run without it. |
 
 This split mirrors [TESTING.md](TESTING.md): deterministic product behavior end-to-end; the LLM's own quality lives in the unit-layer tests with recorded fixtures.
 

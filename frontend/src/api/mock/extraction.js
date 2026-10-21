@@ -1,12 +1,16 @@
 /*
  * Mocked extraction service. Stands in for the app backend's two-layer
- * composite (docs/PROJECT_PLAN.md WS2): an L1 deterministic parser and an
- * "L2 LLM" fallback that is validated by the same rules before it reaches
- * the UI. In-browser stand-in — the real service runs PyMuPDF + regex, and
- * the LLM tier only when enabled.
+ * composite (docs/PROJECT_PLAN.md WS2): L1 deterministic parsing first and,
+ * only when L1 fails validation, the real L2 — llm_ocr_fuse
+ * (mock/llmOcrFuse.js: document text + page images → local OpenAI-compatible
+ * LLM → same validators, ≤2 re-prompts, fail-soft). The LLM's answer is a
+ * suggestion re-checked by the same rules; whatever still fails stays blank
+ * for manual entry, and an unreachable/disabled LLM degrades exactly like
+ * the documented AI-unavailable case.
  */
 
 import { parseMoney } from '../../utils/money'
+import { extractOfferFuse, llmTier } from './llmOcrFuse'
 
 const VAT_RE = /^DE[0-9]{9}$/
 
@@ -103,80 +107,72 @@ export function validateExtraction(fields) {
   return problems
 }
 
-// --- L2: the "LLM" stand-in ----------------------------------------------
-
-function parseLinesLoose(text) {
-  // Tolerates labels the strict parser misses: "Item:", "Price:", "Qty:".
-  const items = []
-  let current = null
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line) continue
-    const product = line.match(/^(?:\d+[.)]\s*)?(?:product|item|description)\s*[:–-]\s*(.+)$/i)
-    if (product) {
-      current = { fields: {} }
-      current.fields.position_description = product[1].replace(/[.,;]+$/, '').trim()
-      items.push(current)
-      continue
-    }
-    if (!current) continue
-    const qty = line.match(/^(?:quantity|amount|qty)\b\s*:?\s*(\d[\d.,]*)\s*$/i)
-    if (qty) {
-      current.fields.amount = Number(qty[1].replace(/[^\d]/g, ''))
-      continue
-    }
-    const price = line.match(/^(?:(?:unit\s*)?price)\b\s*:?\s*([\d][\d.,\s]*\s?€?)\s*$/i)
-    const total = line.match(/^total(?:\s*\w+){0,2}\s*:?\s*([\d][\d.,\s]*\s?€?)\s*$/i)
-    if (price) current.fields.unit_price = parseMoney(price[1])
-    else if (total) current.fields.total_price = parseMoney(total[1])
-  }
-  return items
-    .filter((it) => it.fields.position_description)
-    .map((it) => it.fields)
-}
-
-function parseOfferLoose(text) {
-  const out = parseOffer(text)
-  if (out.order_lines.length === 0) {
-    out.order_lines = parseLinesLoose(text).map((l) => ({
-      position_description: l.position_description ?? null,
-      unit_price: l.unit_price ?? null,
-      amount: l.amount ?? null,
-      total_price: l.total_price ?? null,
-    }))
-  }
-  return out
-}
-
 // --- entry point ----------------------------------------------------------
 
 /**
- * Mock extraction over document text.
+ * Two-layer composite extraction over document text.
  * Returns { layer, fields, detected, problems } — the same shape the real
  * /extraction endpoint will return. prices/totals are integer cents.
+ * `layer: null` means the document was not readable (or the LLM tier was
+ * off/unreachable for the documents L1 cannot parse); `detail` then carries
+ * the manual-entry degradation message the UI shows.
  */
-export function extractFromText(rawText) {
+export async function extractOffer({ content, images = [], onProgress } = {}) {
+  const rawText = String(content ?? '')
   if (rawText.includes('\u0000') || /%PDF-\d/.test(rawText)) {
-    // Binary/PDF content: the real backend extracts text with PyMuPDF; the
-    // mock degrades exactly like an extraction failure would.
-    return { layer: null, fields: null, detected: {}, problems: new Set(['unreadable']) }
+    // Binary/PDF content reaching the text path: the real backend extracts
+    // text with PyMuPDF; here the PDF was supposed to be read in-browser.
+    return {
+      layer: null,
+      fields: null,
+      detected: {},
+      problems: ['unreadable'],
+      detail: 'The document could not be read as text. Please enter the details manually.',
+    }
   }
 
   const l1 = parseOffer(rawText)
   const l1Problems = validateExtraction(l1)
   if (l1Problems.size === 0) {
-    return { layer: 'L1', fields: l1, detected: detectMap(l1), problems: l1Problems }
+    return { layer: 'L1', fields: l1, detected: detectMap(l1), problems: [] }
   }
 
-  const l2 = parseOfferLoose(rawText)
-  const l2Problems = validateExtraction(l2)
+  // L2 — triggered only when L1 validation fails (validation-based gate,
+  // docs/PROJECT_PLAN.md WS2). The LLM tier decides between the fuse and the
+  // documented manual-entry degradation.
+  if (llmTier() !== 'on') {
+    return {
+      layer: null,
+      unavailable: true,
+      fields: null,
+      detected: {},
+      problems: [...l1Problems],
+      detail: 'AI extraction is switched off in this environment — enter the details manually.',
+    }
+  }
+
+  onProgress?.('The deterministic read did not fully validate — extracting with the LLM')
+  const fused = await extractOfferFuse({ text: rawText, images, onProgress })
+  if (!fused.ok) {
+    return {
+      layer: null,
+      unavailable: true,
+      fields: null,
+      detected: {},
+      problems: [...l1Problems],
+      detail: `The LLM extraction failed (${fused.reason}) — enter the details manually.`,
+    }
+  }
+
+  const l2 = fused.fields
   // LLM output is a suggestion re-checked by the same validators; whatever
   // still fails is reported as "not detected" for manual entry.
   return {
     layer: 'L2',
     fields: l2,
     detected: detectMap(l2),
-    problems: l2Problems,
+    problems: [...validateExtraction(l2)],
+    llm: fused.meta,
   }
 }
 

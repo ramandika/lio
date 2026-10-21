@@ -65,6 +65,10 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
   const [apiMessage, setApiMessage] = useState(null)
   const [source, setSource] = useState(() => (saved?.source ? { ...saved.source } : null)) // provenance
   const suggestToken = useRef(0)
+  // Bumped when the apply-extraction effect changes the form underneath an
+  // in-flight suggestion: the suggestion then recomputes from the new fields
+  // (the token guard alone would discard the answer without ever re-asking).
+  const [suggestionEpoch, setSuggestionEpoch] = useState(0)
 
   const itemsSignature = form.order_lines
     .map((l) => l.description)
@@ -113,7 +117,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
     }, 500)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.title, form.department, itemsSignature, selectedSource])
+  }, [form.title, form.department, itemsSignature, selectedSource, suggestionEpoch])
 
   const sum = useMemo(
     () => form.order_lines.reduce((acc, l) => acc + (parseMoney(l.line_total) ?? 0), 0),
@@ -134,7 +138,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
   const onExtracted = ({ fields, layer, detected, filename, document_id, commodity_suggestion: suggestion }) => {
     const extractedLines = (fields.order_lines ?? []).map((l) => ({
       description: l.position_description ?? '',
-      unit: 'pieces',
+      unit: l.unit || 'pieces',
       unit_price: l.unit_price != null ? centsToDecimal(l.unit_price) : '',
       amount: l.amount != null ? String(l.amount) : '',
       line_total: l.total_price != null ? centsToDecimal(l.total_price) : '',
@@ -164,7 +168,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
         detected: detected ?? {},
       })
     }
-    suggestToken.current += 1 // stale in-flight suggestions stay applied
+    setSuggestionEpoch((e) => e + 1) // recompute the suggestion from the new fields
     setErrors({}) // field keys match, so stale inline errors disappear with the prefill
   }
 

@@ -20,13 +20,14 @@ async function getPdfjs() {
   return pdfjsPromise
 }
 
-export async function pdfToText(dataUrl) {
+export async function pdfToPages(dataUrl) {
   const pdfjs = await getPdfjs()
   const pdf = await pdfjs.getDocument({ url: dataUrl }).promise
-  const lines = []
+  const pages = []
   for (const pageNo of Array.from({ length: pdf.numPages }, (_, i) => i + 1)) {
     const page = await pdf.getPage(pageNo)
     const content = await page.getTextContent()
+    const lines = []
     let current = ''
     let currentY = null
     for (const item of content.items) {
@@ -45,8 +46,41 @@ export async function pdfToText(dataUrl) {
       }
     }
     if (current.trim()) lines.push(current)
+    pages.push({ pageNo, text: lines.join('\n') })
   }
-  return lines.join('\n')
+  return pages
+}
+
+export async function pdfToText(dataUrl) {
+  // Page-marked, like the benchmark's per-page reading-order text: the L1
+  // parsers are line-based and simply skip the marker lines; the L2 fuse
+  // (llm_ocr_fuse) reads the page structure from them.
+  const pages = await pdfToPages(dataUrl)
+  return pages.map((p) => `--- page ${p.pageNo} ---\n${p.text}`).join('\n\n')
+}
+
+/**
+ * Render each page of a PDF (as a data URL) to a PNG data URI at reading
+ * resolution — the image half of the llm_ocr_fuse input (utils/pdf.js stands
+ * in for the benchmark's reader.render_page). Raster scale capped to bound
+ * canvas memory; pages that render are returned in order, failures skip.
+ */
+export async function pdfPageImages(dataUrl, maxWidth = 1000) {
+  const pdfjs = await getPdfjs()
+  const pdf = await pdfjs.getDocument({ url: dataUrl }).promise
+  const uris = []
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+    const page = await pdf.getPage(pageNo)
+    const base = page.getViewport({ scale: 1 })
+    const viewport = page.getViewport({ scale: Math.min(maxWidth / base.width, 3) })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(viewport.width)
+    canvas.height = Math.round(viewport.height)
+    const ctx = canvas.getContext('2d')
+    await page.render({ canvasContext: ctx, viewport }).promise
+    uris.push(canvas.toDataURL('image/png'))
+  }
+  return uris
 }
 
 /**

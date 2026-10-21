@@ -84,6 +84,21 @@ export function suggestCommodity({ title, department, items }) {
 
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1])
   const best = ranked[0]
+  if (!best) {
+    // The haystack may be non-empty yet match no rule (e.g. a German-domain
+    // offer outside the keyword bank) — that is the fallback's job, not a
+    // crash: suggest the generic group at low confidence and let the user override.
+    return {
+      suggestion: {
+        id: FALLBACK,
+        category: commodity(FALLBACK).category,
+        name: commodity(FALLBACK).name,
+        confidence: 'low',
+        reasoning: 'No strong signal found — defaulted to a generic group.',
+      },
+      candidates: [],
+    }
+  }
   const suggestion = commodity(best[0]) && {
     id: best[0],
     category: commodity(best[0]).category,

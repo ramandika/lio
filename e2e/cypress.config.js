@@ -12,9 +12,11 @@ module.exports = defineConfig({
     screenshotsFolder: 'cypress/screenshots',
     videosFolder: 'cypress/videos',
     fixtureFolder: 'cypress/fixtures',
-    // A red run is diagnosable without repeating it (E2E_TESTING.md).
+    // Videos are a local-dev aid — the produced files are gitignored
+    // (e2e/cypress/videos/). A red run is diagnosable without repeating
+    // it (E2E_TESTING.md).
     screenshotOnRunFailure: true,
-    video: Boolean(process.env.CI),
+    video: true,
     viewportWidth: 1600,
     viewportHeight: 1000,
   },

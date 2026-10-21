@@ -13,7 +13,7 @@
  * module out for app/api/http.js must not require view changes.
  */
 
-import { extractFromText } from './extraction'
+import { extractOffer } from './extraction'
 import { suggestCommodity } from './classifier'
 import { COMMODITY_BY_ID } from './commodity'
 import { SAMPLE_PDF_DATA_URL, SAMPLE_PDF_FILENAME } from './samplePdf'
@@ -613,18 +613,23 @@ const handlers = {
       })
       persist()
     }
-    const result = extractFromText(String(body.content ?? ''))
+    const result = await extractOffer({
+      content: String(body.content ?? ''),
+      images: body.images ?? [],
+      onProgress,
+    })
     await delay(300)
     if (result.layer === null) {
+      // The upload was kept (above) even on failure — the degrades message
+      // says the user completes the request manually, document attached.
       return {
         ok: false,
         document_id,
-        detail: 'The document could not be read as text. Please enter the details manually.',
+        detail: result.detail ?? 'Extraction failed. Please enter the details manually.',
       }
     }
     onProgress?.('Validating extracted fields')
     await delay(250)
-    if (result.layer === 'L2') await delay(600) // simulated LLM round-trip
     const suggestion = suggestCommodity({
       title: null,
       department: result.fields.department,
@@ -637,6 +642,7 @@ const handlers = {
       fields: result.fields,
       detected: result.detected,
       problems: [...result.problems],
+      llm: result.llm ?? null,
       commodity_suggestion: suggestion.suggestion,
     }
   },

@@ -9,7 +9,7 @@
  */
 
 import * as mockServer from './mock/server'
-import { pdfToText } from '../utils/pdf'
+import { pdfToText, pdfPageImages } from '../utils/pdf'
 
 export { ApiError } from './mock/server'
 
@@ -50,8 +50,11 @@ export const extraction = {
     if (/\.pdf$/i.test(filename)) mimeType = 'application/pdf'
     // PDFs are read with PyMuPDF in the real backend; the mock reads them
     // in-browser with pdf.js (utils/pdf.js) and runs the same L1/L2 pipeline
-    // on the text. The original file travels along as a data URL so the mock
-    // can store it where the backend would keep it in the uploads volume.
+    // on the text, with the rendered page images riding along for the L2
+    // fuse (llm_ocr_fuse). The original file travels along as a data URL so
+    // the mock can store it where the backend would keep it in the uploads
+    // volume.
+    let images = []
     if (mimeType === 'application/pdf') {
       try {
         content = await pdfToText(data)
@@ -63,8 +66,14 @@ export const extraction = {
           detail: 'The PDF could not be read in this browser build. The full stack reads PDFs with PyMuPDF — enter the details manually.',
         }
       }
+      try {
+        images = await pdfPageImages(data)
+      } catch (err) {
+        console.warn('pdf.js page rendering failed; the LLM fuse reads text only:', err)
+        images = []
+      }
     }
-    return POST('/extraction', { body: { filename, mimeType, content, data }, onProgress })
+    return POST('/extraction', { body: { filename, mimeType, content, data, images }, onProgress })
   },
 }
 

@@ -43,3 +43,13 @@ Cypress.Commands.add('signIn', (email = 'ana@example.com', password = 'demo') =>
 Cypress.Commands.add('openNewRequest', () => {
   cy.findByRole('button', { name: '+ Add Request' }).click()
 })
+/**
+ * Flip the mock's LLM tier off — the in-browser stand-in for the real stack's
+ * LLM_TIER=off deployment switch (mock/llmOcrFuse.js). Session storage rides
+ * this tab's session, so it outlives the signIn navigation; the mock reads
+ * it per extraction call. Used by journeys that exercise the documented
+ * manual-entry degradation.
+ */
+Cypress.Commands.add('disableAi', () => {
+  cy.window().then((win) => win.sessionStorage.setItem('asklio.llm_tier', 'off'))
+})
