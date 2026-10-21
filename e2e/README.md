@@ -39,7 +39,7 @@ CYPRESS_BASE_URL=http://localhost:8020 npm run cy:run
 | Journey | Spec | State |
 |---------|------|-------|
 | J1 — Intake happy path | `cypress/e2e/j1-intake-happy-path.cy.js` | ✅ passing |
-| J2 — invalid submission rejected | — | to do |
+| J2 — invalid submission rejected | `cypress/e2e/j2-intake-invalid-rejected.cy.js` | ✅ passing |
 | J3 — offer upload → auto-fill → submit | — | to do |
 | J4 — commodity suggestion | — | to do |
 | J5 — overview status & history | — | to do |
