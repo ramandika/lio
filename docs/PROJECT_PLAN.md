@@ -91,6 +91,8 @@ Done when: changing a status produces a permanent history entry, and the history
 4. **M4** — Commodity group suggestion (WS3).
 5. **M5** — Tests, polish, docs, deployment (WS5).
 
+Progress: M1–M4 are demonstrated end-to-end by the frontend against the mocked backend (`frontend/src/api/mock/`); the backend (`app/`) that makes them real is the next step, followed by M5's test layers.
+
 ## Stack decisions
 
 | Layer | Choice |
@@ -122,16 +124,17 @@ Frontend conventions agreed (not yet implemented):
 
 Changes required at implementation time (currently deferred):
 
-1. ~~`docker-compose.yml` → `db` service~~ **done** (`postgres:17`, named volume `postgres-data`, healthcheck; `uploads` volume keeps the uploaded offer files only — no DB inside it). Remaining: add the `vite` dev service (port 5173, `/api` proxied to the app) when the frontend is bootstrapped; the app serves `dist` for production-like runs.
+1. ~~`docker-compose.yml` → `db` service~~ **done** (`postgres:17`, named volume `postgres-data`, healthcheck; `uploads` volume keeps the uploaded offer files only — no DB inside it). Remaining: add the `vite` dev service (port 5173, `/api` proxied to the app) when the frontend is wired to the real backend; until then the frontend runs with an in-browser mock API (`npm run dev` in `frontend/`).
 2. ~~`requirements.txt` → add `psycopg[binary]`~~ **done** (`psycopg[binary]==3.2.3`); SQLAlchemy/Alembic stay open until the ORM/migration route is decided.
 3. ~~Config: `DATABASE_URL`~~ **done** — `DB_PATH` is dropped; compose sets `DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://lio:lio@db:5432/lio}` and `.env.example` documents the override.
 4. `app/db.py` → PostgreSQL connection + schema init (or Alembic migrations); numeric columns stored as `NUMERIC`, not floats.
 5. `Dockerfile` → multi-stage: `node:20-slim` stage runs `npm ci && npm run build`; the python stage copies `frontend/dist` in. (Needs no DB-specific change.)
-6. `.gitignore` → add `frontend/node_modules/` and `frontend/dist/`.
+6. ~~`.gitignore` → add `frontend/node_modules/` and `frontend/dist/`~~ **done**.
 7. ~~`docs/DEPLOYMENT.md` rewrite~~ **done** — now documents the Postgres service, `DATABASE_URL`, and the two volumes (`postgres-data`, `uploads`).
 8. `static/` as a source directory disappears — it becomes build output only.
 9. `e2e/` directory at repo root: Cypress config + J1–J6 spec files + `sample-offer.txt` fixture; add `cypress` npm devDependency to `frontend/` (or a standalone `e2e/package.json` to keep the app build slim).
 10. `docs/E2E_TESTING.md` → replace the Playwright-default paragraph with Cypress as the chosen harness; journey specs carry over as-is (Cypress lacks WebKit — Chromium/Firefox/Electron is enough).
+11. **Frontend bootstrapped with a mocked backend (done).** `frontend/` is a React 18 + Vite SPA (login, intake with offer upload + extraction + commodity suggestion, overview with filters, detail with status history/management) on the lio.ai design tokens. Its data access funnels through `frontend/src/api/index.js`, which delegates to `frontend/src/api/mock/server.js` — an in-browser stand-in enforcing the documented API-boundary rules (validation, append-only status history, role scoping) and simulating the two-layer extraction and the classifier. When the FastAPI backend lands, implement `frontend/src/api/http.js` transport and flip `useMock` in `api/index.js`; views and validation mirror (`frontend/src/validation.js`) stay untouched.
 
 ### CI — GitHub Actions (`.github/workflows/ci.yml`)
 

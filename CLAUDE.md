@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 askLio — a procurement request system built for the take-home challenge in [README.md](README.md): intake with validation, offer-document upload with auto-extraction, automatic commodity-group suggestion over a fixed 50-item list, and a request overview with immutable status history.
 
-**Status: planning phase.** The docs in `docs/` are the spec. `app/services/` exists but is empty; `frontend/` and `e2e/` are not yet bootstrapped. [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) is the living implementation plan — read it before building anything, and update it (including its "changes required at implementation time" checklist) as decisions are made.
+**Status: frontend implemented against a mocked backend; FastAPI backend not yet built.** The docs in `docs/` are the spec. `frontend/` is a React + Vite SPA whose data access funnels through `frontend/src/api/index.js` → `api/mock/server.js` (in-browser mock of the documented REST API, enforcing validation/role/history rules; run `npm run dev` in `frontend/`). `app/services/` exists but is empty; `e2e/` not yet bootstrapped. [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) is the living implementation plan — read it before building anything, and update it (including its "changes required at implementation time" checklist) as decisions are made. The mock is swapped for the real API in one place (`api/index.js`, `useMock` flag); views and `src/validation.js` (the inline-UX mirror of the API-boundary rules) are transport-agnostic.
 
 ## Commands
 
@@ -14,9 +14,11 @@ askLio — a procurement request system built for the take-home challenge in [RE
 cp .env.example .env       # then set LLM_API_KEY (optional — without it, AI features degrade to manual entry)
 docker compose up -d --build   # db (postgres:17) + app; http://localhost:8020
 docker compose logs -f app
+cd frontend && npm run dev    # frontend alone, against the in-browser mock API; http://localhost:5173
 ```
 
-- Dev loop: compose bind-mounts `./app`, `./static`, `./scripts` and runs `uvicorn --reload` — code changes need no rebuild. Rebuild only for `requirements.txt` or Dockerfile changes.
+- Frontend dev loop: `npm run dev` (Vite) with the mock backend — no Python/compose needed; persisted to `localStorage` (key `asklio.mockdb.v1`, reset via a console `localStorage.removeItem` + reload). Demo logins: ana@example.com (requestor) · kim@example.com (procurement) · admin@example.com · password `demo`.
+- Backend dev loop: compose bind-mounts `./app`, `./static`, `./scripts` and runs `uvicorn --reload` — code changes need no rebuild. Rebuild only for `requirements.txt` or Dockerfile changes.
 - No test suite, lint, or frontend exist yet. Per the plan: pytest for backend (must run offline, without an API key), Vite build as the frontend gate, Cypress for E2E journeys J1–J6 (this **supersedes** the Playwright default stated in E2E_TESTING.md). What each layer must cover — and the key fixtures (README sample offer, invalid-payload categories, status-history persistence) — is in [TESTING.md](docs/TESTING.md).
 
 ## Intended layout (from PROJECT_PLAN.md — not yet implemented)
