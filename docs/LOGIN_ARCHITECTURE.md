@@ -50,7 +50,7 @@ Session parameters: opaque random id (128-bit, not derivable from user data), `H
 USER (new)
 ├─ id
 ├─ email            (unique)
-├─ password_hash    (bcrypt/argon2 — never plaintext, never reversible)
+├─ password_hash    (bcrypt — never plaintext, never reversible)
 ├─ role             (requestor | procurement | admin)
 ├─ display_name
 ├─ created_at
@@ -91,7 +91,7 @@ Notes:
 
 - **Uniform failure message** ("invalid email or password") for unknown user and bad password — no user enumeration.
 - **Rate limit** per email and per IP (e.g. 5 attempts / 15 min) — plain counters in the DB or memory; no Redis dependency.
-- Passwords: bcrypt (cost ≥ 12) or argon2id; never logged, never returned.
+- Passwords: **bcrypt** (`bcrypt` PyPI package, cost ≥ 12) via the `bcrypt` library's constant-time `checkpw`; never logged, never returned.
 
 ### Authenticated request
 
@@ -121,7 +121,7 @@ CSRF: cookie auth needs CSRF protection on state-changing endpoints — the stan
 
 ## Security checklist
 
-- [x] Passwords hashed (bcrypt/argon2), constant-time comparison
+- [x] Passwords hashed (bcrypt, cost ≥ 12), constant-time comparison
 - [x] Cookie `HttpOnly`, `SameSite=Lax`, `Secure` when HTTPS
 - [x] Server-side revocation on logout and on password change (drop other sessions)
 - [x] Login rate limiting + uniform failure messages
