@@ -7,6 +7,9 @@
  *   - only valid requests persist (required fields, VAT format, line math…)
  *   - status history is append-only; every change is retained with its actor
  *   - role scoping: requestor sees own requests only, procurement sees all
+ *   - the uploads store is scoped the same way: a stored document is read by
+ *     its uploader, by whomever may see the request it back, or by staff;
+ *     a request may only carry a document its submitter may access
  *
  * Sessions live in localStorage here purely as a dev convenience — the real
  * backend uses HttpOnly cookies (see LOGIN_ARCHITECTURE.md). Swapping this
@@ -238,6 +241,8 @@ function seedDb() {
     documents: [
       {
         id: 'd1',
+        // Ana uploaded r1's offer — same ownership field as runtime uploads.
+        created_by: 'u1',
         filename: SAMPLE_PDF_FILENAME,
         mime: 'application/pdf',
         size: 1908,
@@ -475,6 +480,9 @@ const handlers = {
   'POST /requests': async ({ body }) => {
     const user = requireUser()
     await latency()
+    // Provenance must point at a document the submitter may access (403 —
+    // same boundary rule as reading it), before the field validation runs.
+    assertSourceAccess(user, body.source)
     const errors = validateRequestPayload(body)
     if (Object.keys(errors).length > 0) throw new ApiError(422, { errors })
 
@@ -540,6 +548,9 @@ const handlers = {
     if (r.status !== 'Open') {
       throw new ApiError(409, 'A request can only be edited while it is still “Open”.')
     }
+    // The PUT keeps provenance as-is, but it never re-points it at a
+    // document the editor cannot access — same 403 as on create.
+    assertSourceAccess(user, body.source)
     const errors = validateRequestPayload(body)
     if (Object.keys(errors).length > 0) throw new ApiError(422, { errors })
 
@@ -606,6 +617,9 @@ const handlers = {
       document_id = `d${db.counters.document++}`
       db.documents.push({
         id: document_id,
+        // Stored with its uploader, like request.created_by — the boundary
+        // checks below scope the uploads store the same way as /requests.
+        created_by: userForSession()?.id ?? null,
         filename: body.filename ?? 'upload',
         mime: body.mime ?? body.mimeType ?? 'application/octet-stream',
         size: Math.round((body.data.length * 3) / 4),
@@ -648,9 +662,16 @@ const handlers = {
   },
 
   'GET /documents/:id': async ({ params }) => {
-    requireUser()
+    const user = requireUser()
     const doc = (db.documents ?? []).find((d) => d.id === params.id)
-    if (!doc) throw new ApiError(404, 'Document not found.')
+    // Same role scoping as /requests, applied to the uploads store: a
+    // requestor reaches only documents they uploaded or that back a request
+    // they can see; procurement/admin see all. A rejection reads as "not
+    // found" — no more than the request handlers confirm about another
+    // requestor's data.
+    if (!doc || !canAccessDocument(user, doc)) {
+      throw new ApiError(404, 'Document not found.')
+    }
     return { document: doc }
   },
 
@@ -665,6 +686,29 @@ function requireUser() {
   const user = userForSession()
   if (!user) throw new ApiError(401, 'Not authenticated.')
   return user
+}
+
+// Can this user read this stored document? The mirror of the /requests
+// scoping over the uploads store: requestors — own uploads and documents
+// attached to requests they may see; procurement/admin — everything.
+function canAccessDocument(user, doc) {
+  if (user.role !== 'requestor') return true
+  if (doc.created_by === user.id) return true
+  return db.requests.some(
+    (r) => r.created_by === user.id && r.source?.document_id === doc.id,
+  )
+}
+
+// Boundary check for a request payload's provenance: a request may only
+// carry (and keep carrying) a document the submitting user may access —
+// otherwise a requestor could attach another requestor's upload.
+function assertSourceAccess(user, source) {
+  const docId = source?.document_id
+  if (!docId) return
+  const doc = (db.documents ?? []).find((d) => d.id === docId)
+  if (!doc || !canAccessDocument(user, doc)) {
+    throw new ApiError(403, 'A request can only carry a document you uploaded yourself.')
+  }
 }
 
 function cryptoRandomId() {
