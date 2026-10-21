@@ -33,6 +33,9 @@ export default function RequestDocument({ id, onChanged, reloadKey = 0 }) {
   const [comment, setComment] = useState('')
   const [statusBusy, setStatusBusy] = useState(false)
   const [statusError, setStatusError] = useState(null)
+  // A short success confirmation for the last status move — "Approved" for a
+  // close (the clerk's grant), the status name for any other move.
+  const [statusNote, setStatusNote] = useState(null)
   const [tab, setTab] = useState('sheet') // 'sheet' | 'document'
   const [focus, setFocus] = useState(false) // full-height document view
 
@@ -51,6 +54,7 @@ export default function RequestDocument({ id, onChanged, reloadKey = 0 }) {
 
   useEffect(() => {
     setData(null)
+    setStatusNote(null)
     load()
   }, [load])
 
@@ -76,10 +80,12 @@ export default function RequestDocument({ id, onChanged, reloadKey = 0 }) {
   const changeStatus = async (newStatus) => {
     setStatusBusy(true)
     setStatusError(null)
+    setStatusNote(null)
     try {
       const d = await requestsApi.updateStatus(id, newStatus, comment)
       setData(d)
       setComment('')
+      setStatusNote(newStatus === 'Closed' ? 'Approved' : newStatus)
       onChanged?.()
     } catch (err) {
       setStatusError(err.payload?.detail ?? 'Updating failed.')
@@ -197,6 +203,13 @@ export default function RequestDocument({ id, onChanged, reloadKey = 0 }) {
               </p>
             )}
           </div>
+        )}
+        {/* Outside the mover block — once Closed the mover itself is gone
+            and only this confirmation marks the move. */}
+        {statusNote && (
+          <Banner kind="success" onDismiss={() => setStatusNote(null)}>
+            <p>{statusNote}</p>
+          </Banner>
         )}
       </section>
 

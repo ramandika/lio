@@ -414,10 +414,15 @@ const STATUS_TRANSITIONS = {
 
 export function validateTransition(oldStatus, newStatus) {
   if (!(newStatus in STATUS_TRANSITIONS)) return `Unknown status “${newStatus}”.`
-  if (!STATUS_TRANSITIONS[oldStatus].includes(newStatus)) {
-    return `A request in “${oldStatus}” cannot move to “${newStatus}”.`
-  }
-  return null
+  const allowed = STATUS_TRANSITIONS[oldStatus] ?? []
+  if (allowed.includes(newStatus)) return null
+  // The refusal carries the actionable reason: which statuses the request
+  // may still reach — none from Closed, where the documented chain ends.
+  const may =
+    allowed.length > 0
+      ? `it may only move to ${allowed.map((s) => `“${s}”`).join(', ')}`
+      : 'it has reached the end of the chain and can no longer move'
+  return `A request in “${oldStatus}” cannot move to “${newStatus}” — ${may} (requests follow Open → In Progress → Closed).`
 }
 
 // --- handlers (method, path) -----------------------------------------------

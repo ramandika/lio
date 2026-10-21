@@ -58,4 +58,10 @@ Beyond the journeys, an authorization suite pins the boundary rules in the UI:
 `authz-locked.cy.js` (nothing already In Progress is editable by anyone — the
 lock renders for requestor, procurement and admin alike; the boundary itself
 rejects any `PUT` on a non-Open request with 409, `frontend/src/api/mock/server.js`).
-All passing.
+`status-close.cy.js` covers the close move itself: Kim closes the seeded
+In Progress request and the confirmation reads exactly "Approved" (an
+Open → In Progress move confirms with the status name in the same shape),
+while a Closed request renders no mover at all — no invalid transition is
+clickable, so the boundary's enriched refusal (which statuses could still be
+reached, or that the chain has ended) is asserted against the exported
+`validateTransition` instead. All passing.
