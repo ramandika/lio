@@ -9,6 +9,7 @@
  */
 
 import * as mockServer from './mock/server'
+import { pdfToText } from '../utils/pdf'
 
 export { ApiError } from './mock/server'
 
@@ -22,6 +23,7 @@ async function call(method, path, opts) {
 
 const GET = (path, opts) => call('GET', path, opts)
 const POST = (path, opts) => call('POST', path, opts)
+const PUT = (path, opts) => call('PUT', path, opts)
 
 export const auth = {
   login: (email, password) => POST('/auth/login', { body: { email, password } }),
@@ -33,22 +35,42 @@ export const requests = {
   list: (query = {}) => GET('/requests', { query }),
   get: (id) => GET(`/requests/${id}`, {}),
   create: (payload) => POST('/requests', { body: payload }),
+  // Edit a saved request (same payload as create). Server-side rules:
+  // only while the request is still Open; ownership for requestors.
+  update: (id, payload) => PUT(`/requests/${id}`, { body: payload }),
   updateStatus: (id, newStatus, comment) =>
     POST(`/requests/${id}/status`, { body: { new_status: newStatus, comment } }),
 }
 
-/** Offer extraction. body: { filename, mimeType, content? , file? } */
+/** Offer extraction. body: { filename, mimeType, content? , data? } */
 export const extraction = {
-  submit: async ({ filename, mimeType, content }, onProgress) => {
-    if (mimeType === 'application/pdf' || /\.(pdf)$/i.test(filename)) {
-      // PDFs are read by PyMuPDF in the real backend; the mock cannot parse
-      // binary payloads, so it exercises the documented degradation path.
-      await new Promise((r) => setTimeout(r, 400))
-      return { ok: false, detail: 'PDF extraction needs the backend service — this browser build reads text documents (.txt, .md, .csv). The full stack handles PDFs.'
+  submit: async ({ filename, mimeType = '', content, data }, onProgress) => {
+    // The real backend sniffs/stores the MIME server-side; here the filename
+    // is authoritative (some browsers label PDFs application/octet-stream).
+    if (/\.pdf$/i.test(filename)) mimeType = 'application/pdf'
+    // PDFs are read with PyMuPDF in the real backend; the mock reads them
+    // in-browser with pdf.js (utils/pdf.js) and runs the same L1/L2 pipeline
+    // on the text. The original file travels along as a data URL so the mock
+    // can store it where the backend would keep it in the uploads volume.
+    if (mimeType === 'application/pdf') {
+      try {
+        content = await pdfToText(data)
+      } catch (err) {
+        console.warn('pdf.js text extraction failed, degrading to manual entry:', err)
+        await new Promise((r) => setTimeout(r, 400))
+        return {
+          ok: false,
+          detail: 'The PDF could not be read in this browser build. The full stack reads PDFs with PyMuPDF — enter the details manually.',
+        }
       }
     }
-    return POST('/extraction', { body: { filename, content }, onProgress })
+    return POST('/extraction', { body: { filename, mimeType, content, data }, onProgress })
   },
+}
+
+/** Uploaded offer documents. The real backend stores files in the uploads volume. */
+export const documents = {
+  get: (id) => GET(`/documents/${id}`, {}),
 }
 
 export const commodity = {

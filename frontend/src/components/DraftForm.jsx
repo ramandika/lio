@@ -1,42 +1,84 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ApiError, commodity, requests } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { parseMoney, centsToDecimal } from '../utils/money'
 import { validateForm, toPayload } from '../validation'
-import { Field, TextInput, Btn, Card, Banner } from '../components/ui'
-import OrderLinesEditor from '../components/OrderLinesEditor'
-import ExtractionPanel from '../components/ExtractionPanel'
-import CommoditySuggestion from '../components/CommoditySuggestion'
+import { Field, TextInput, Btn, Card, Banner } from './ui'
+import OrderLinesEditor from './OrderLinesEditor'
+import CommoditySuggestion from './CommoditySuggestion'
 
 const EMPTY_LINE = { description: '', unit: '', unit_price: '', amount: '', line_total: '', auto: true }
 
-export default function NewRequest() {
+/*
+ * The request form, living in the Extraction Layer pane: the user edits the
+ * extracted values with the offer document readable in the center. Two uses —
+ * an intake draft (prefilled by extraction results) and a saved request being
+ * edited (`initial` carries the request view; it edits only while Open).
+ * Provenance (which document, which layer) travels with the submission.
+ */
+
+function lineFromSaved(l) {
+  return {
+    description: l.position_description,
+    unit: l.unit,
+    unit_price: centsToDecimal(l.unit_price),
+    amount: String(l.amount),
+    line_total: centsToDecimal(l.total_price),
+    auto: l.total_price === l.unit_price * l.amount,
+  }
+}
+
+export default function DraftForm({ extraction, initial = null, onDone, onLeave }) {
   const { user } = useAuth()
-  const navigate = useNavigate()
-  const [form, setForm] = useState(() => ({
-    requestor_name: user?.display_name ?? '',
-    title: '',
-    vendor_name: '',
-    vendor_vat_id: '',
-    department: '',
-    order_lines: [{ ...EMPTY_LINE }],
-    total_cost: '',
-    total_auto: true,
-  }))
+  const saved = initial?.request ?? null // editing a saved request when present
+  const [form, setForm] = useState(() =>
+    saved
+      ? {
+          requestor_name: saved.requestor_name,
+          title: saved.title,
+          vendor_name: saved.vendor_name,
+          vendor_vat_id: saved.vendor_vat_id,
+          department: saved.department,
+          order_lines: saved.order_lines.map(lineFromSaved),
+          total_cost: centsToDecimal(saved.total_cost),
+          total_auto: true,
+        }
+      : {
+          requestor_name: user?.display_name ?? '',
+          title: '',
+          vendor_name: '',
+          vendor_vat_id: '',
+          department: '',
+          order_lines: [{ ...EMPTY_LINE }],
+          total_cost: '',
+          total_auto: true,
+        },
+  )
   const [autoSuggestion, setAutoSuggestion] = useState(null) // latest suggestion, not necessarily selected
-  const [selectedId, setSelectedId] = useState(null)
-  const [selectedSource, setSelectedSource] = useState(null) // 'auto' | 'manual'
-  const [suggestionLoading, setSuggestionLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState(() => saved?.commodity_group_id ?? null)
+  // A saved request's group is treated like a manual choice, so the
+  // auto-suggestion never silently replaces what was already submitted.
+  const [selectedSource, setSelectedSource] = useState(() => (saved ? 'manual' : null))
+  const [suggestionLoading, setSuggestionLoading] = useState(() => !saved)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [apiMessage, setApiMessage] = useState(null)
+  const [source, setSource] = useState(() => (saved?.source ? { ...saved.source } : null)) // provenance
   const suggestToken = useRef(0)
 
   const itemsSignature = form.order_lines
     .map((l) => l.description)
     .filter(Boolean)
     .join('|')
+
+  // Apply the latest extraction result from the side pane. `nonce` changes on
+  // every upload, so re-uploading the same file re-applies deliberately.
+  const extractNonce = extraction?.nonce
+  useEffect(() => {
+    if (!extractNonce || !extraction.result) return
+    onExtracted(extraction.result)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extractNonce])
 
   // Auto-suggest the commodity group from title/descriptions/department.
   // A manual override is never silently replaced.
@@ -89,7 +131,7 @@ export default function NewRequest() {
     })
   }
 
-  const onExtracted = ({ fields, commodity_suggestion: suggestion }) => {
+  const onExtracted = ({ fields, layer, detected, filename, document_id, commodity_suggestion: suggestion }) => {
     const extractedLines = (fields.order_lines ?? []).map((l) => ({
       description: l.position_description ?? '',
       unit: 'pieces',
@@ -113,6 +155,15 @@ export default function NewRequest() {
       setSelectedId(suggestion.id)
       setSelectedSource('auto')
     }
+    if (filename) {
+      setSource({
+        filename,
+        layer,
+        // The stored upload rides along so the request can show the real document.
+        ...(document_id ? { document_id } : {}),
+        detected: detected ?? {},
+      })
+    }
     suggestToken.current += 1 // stale in-flight suggestions stay applied
     setErrors({}) // field keys match, so stale inline errors disappear with the prefill
   }
@@ -123,7 +174,6 @@ export default function NewRequest() {
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors)
       setApiMessage({ kind: 'error', text: 'This request can’t be submitted yet — fix the highlighted fields.' })
-      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     setSubmitting(true)
@@ -132,16 +182,15 @@ export default function NewRequest() {
     try {
       const payload = toPayload(form)
       payload.commodity_group_id = selectedId ?? null
-      const { request } = await requests.create(payload)
-      navigate(`/requests/${request.id}`, {
-        state: { created: true },
-        replace: true,
-      })
+      if (source) payload.source = source // a PUT keeps its provenance as-is
+      const { request, status_history: history } = saved
+        ? await requests.update(saved.id, payload)
+        : await requests.create(payload)
+      onDone(request, history)
     } catch (err) {
       if (err instanceof ApiError && err.status === 422 && err.payload?.errors) {
-        setErrors(mapApiErrors(err.payload.errors))
+        setErrors(err.payload.errors)
         setApiMessage({ kind: 'error', text: 'The request needs attention before it can be saved.' })
-        window.scrollTo({ top: 0, behavior: 'smooth' })
       } else {
         setApiMessage({ kind: 'error', text: err.payload?.detail ?? 'Saving failed — please retry.' })
       }
@@ -151,13 +200,7 @@ export default function NewRequest() {
   }
 
   return (
-    <div className="container container--narrow">
-      <header className="page-head">
-        <h1 className="page-head__title">New Request</h1>
-        <p className="page-head__standfirst">
-          Everything procurement needs to proceed — start from a vendor offer or from scratch.
-        </p>
-      </header>
+    <div className="draftform">
       {apiMessage && (
         <Banner kind={apiMessage.kind} onDismiss={() => setApiMessage(null)}>
           <p>{apiMessage.text}</p>
@@ -170,8 +213,6 @@ export default function NewRequest() {
       )}
 
       <form onSubmit={onSubmit} noValidate>
-        <ExtractionPanel onExtracted={onExtracted} />
-
         <Card className="block">
           <h3 className="block__title">Request Details</h3>
           <div className="grid grid--2">
@@ -287,10 +328,10 @@ export default function NewRequest() {
           </div>
           <div className="formfoot">
             <Btn type="submit" disabled={submitting}>
-              {submitting ? 'Submitting…' : 'Submit Request'}
+              {submitting ? (saved ? 'Saving…' : 'Submitting…') : saved ? 'Save Changes' : 'Submit Request'}
             </Btn>
-            <Btn variant="quiet" onClick={() => navigate(-1)} disabled={submitting}>
-              Cancel
+            <Btn variant="quiet" onClick={onLeave} disabled={submitting}>
+              {saved ? 'Discard Changes' : 'Cancel'}
             </Btn>
           </div>
         </Card>
@@ -301,9 +342,4 @@ export default function NewRequest() {
 
 function sumOf(lines) {
   return lines.reduce((acc, l) => acc + (parseMoney(l.line_total) ?? 0), 0)
-}
-
-/** Flatten server error keys ({"order_lines.0.amount": …}) onto this form's error map. */
-function mapApiErrors(apiErrors) {
-  return apiErrors
 }

@@ -1,4 +1,4 @@
-/** Post-login landing route per role (LOGIN_ARCHITECTURE.md). */
-export function roleHome(user) {
-  return user.role === 'requestor' ? '/requests/new' : '/requests'
+/** Post-login landing route (LOGIN_ARCHITECTURE.md). All roles land on the workbench. */
+export function roleHome() {
+  return '/'
 }

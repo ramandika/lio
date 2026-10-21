@@ -1,13 +1,10 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import NavBar from './components/NavBar'
 import Login from './views/Login'
-import NewRequest from './views/NewRequest'
-import Overview from './views/Overview'
-import RequestDetail from './views/RequestDetail'
+import Workbench from './views/Workbench'
 import NotFound from './views/NotFound'
-import { roleHome } from './routes'
 
 function Guard({ children }) {
   const { loading, user } = useAuth()
@@ -17,6 +14,11 @@ function Guard({ children }) {
   return children
 }
 
+/*
+ * The app is a single workbench page ("/"). The old per-view routes
+ * (/requests, /requests/new, /requests/:id) remain as redirects so old
+ * links keep working.
+ */
 function AppRoutes() {
   return (
     <Routes>
@@ -25,42 +27,21 @@ function AppRoutes() {
         path="/"
         element={
           <Guard>
-            <HomeRedirect />
+            <Workbench />
           </Guard>
         }
       />
-      <Route
-        path="/requests"
-        element={
-          <Guard>
-            <Overview />
-          </Guard>
-        }
-      />
-      <Route
-        path="/requests/new"
-        element={
-          <Guard>
-            <NewRequest />
-          </Guard>
-        }
-      />
-      <Route
-        path="/requests/:id"
-        element={
-          <Guard>
-            <RequestDetail />
-          </Guard>
-        }
-      />
+      <Route path="/requests" element={<Navigate to="/" replace />} />
+      <Route path="/requests/new" element={<Navigate to="/?selected=new" replace />} />
+      <Route path="/requests/:id" element={<LegacyDetail />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
 
-function HomeRedirect() {
-  const { user } = useAuth()
-  return <Navigate to={roleHome(user)} replace />
+function LegacyDetail() {
+  const { id } = useParams()
+  return <Navigate to={`/?selected=${encodeURIComponent(id)}`} replace />
 }
 
 export default function App() {

@@ -16,8 +16,9 @@
 import { extractFromText } from './extraction'
 import { suggestCommodity } from './classifier'
 import { COMMODITY_BY_ID } from './commodity'
+import { SAMPLE_PDF_DATA_URL, SAMPLE_PDF_FILENAME } from './samplePdf'
 
-const STORAGE_KEY = 'asklio.mockdb.v1'
+const STORAGE_KEY = 'asklio.mockdb.v2' // v2: requests carry an uploaded document (r1 ships one)
 const SESSION_KEY = 'asklio.mock.session'
 
 export class ApiError extends Error {
@@ -80,6 +81,20 @@ function seedDb() {
       commodity_group_id: '031',
       total_cost: 210000,
       status: 'In Progress',
+      // r1 is the seeded uploaded-PDF case: the real README sample offer as a
+      // PDF, stored like the backend's uploads volume would.
+      source: {
+        filename: SAMPLE_PDF_FILENAME,
+        layer: 'L1',
+        document_id: 'd1',
+        detected: {
+          vendor_name: true,
+          vendor_vat_id: true,
+          department: true,
+          order_lines: true,
+          total_cost: true,
+        },
+      },
       created_at: new Date(days(3)).toISOString(),
       updated_at: new Date(days(2)).toISOString(),
       order_lines: [
@@ -217,7 +232,21 @@ function seedDb() {
       ],
     },
   ]
-  return { users, requests, sessions: {}, counters: { request: 4, history: 4, line: 10 } }
+  return {
+    users,
+    requests,
+    documents: [
+      {
+        id: 'd1',
+        filename: SAMPLE_PDF_FILENAME,
+        mime: 'application/pdf',
+        size: 1908,
+        data: SAMPLE_PDF_DATA_URL,
+      },
+    ],
+    sessions: {},
+    counters: { request: 4, history: 4, line: 10, document: 2 },
+  }
 }
 
 // --- persistence ------------------------------------------------------------
@@ -229,6 +258,7 @@ try {
   /* corrupted storage falls through to a fresh seed */
 }
 if (!db || !Array.isArray(db.users)) db = seedDb()
+if (!Array.isArray(db.documents)) db.documents = []
 
 function persist() {
   try {
@@ -273,6 +303,11 @@ const userView = ({ id, email, role, display_name }) => ({
 
 function requestView(r) {
   const group = COMMODITY_BY_ID.get(r.commodity_group_id) ?? null
+  // Uploaded document, brief form (full data comes from GET /documents/:id).
+  const doc = (db.documents ?? []).find((d) => d.id === r.source?.document_id)
+  const document = doc
+    ? { id: doc.id, filename: doc.filename, mime: doc.mime, size: doc.size }
+    : null
   return {
     id: r.id,
     requestor_name: r.requestor_name,
@@ -287,6 +322,11 @@ function requestView(r) {
       : null,
     total_cost: r.total_cost,
     status: r.status,
+    // Provenance: the uploaded offer document and the extraction layer that
+    // prefilled it (null when entered manually). UI nicety until the backend
+    // decides whether provenance is a first-class column.
+    source: r.source ?? null,
+    document,
     created_at: r.created_at,
     updated_at: r.updated_at,
     order_lines: r.order_lines,
@@ -451,6 +491,7 @@ const handlers = {
       commodity_group_id: body.commodity_group_id ?? null,
       total_cost: body.total_cost,
       status: 'Open',
+      source: body.source ?? null,
       created_at: now,
       updated_at: now,
       order_lines: body.order_lines.map((line, i) => ({
@@ -487,6 +528,46 @@ const handlers = {
     return { request: requestView(r), status_history: r.status_history }
   },
 
+  'PUT /requests/:id': async ({ params, body }) => {
+    const user = requireUser()
+    await latency()
+    const r = db.requests.find((r) => r.id === params.id)
+    if (!r || (user.role === 'requestor' && r.created_by !== user.id)) {
+      throw new ApiError(404, 'Request not found.')
+    }
+    // Editing rule: the record is only mutable while it is still Open —
+    // once a request is in progress its facts are fixed and the trail rules.
+    if (r.status !== 'Open') {
+      throw new ApiError(409, 'A request can only be edited while it is still “Open”.')
+    }
+    const errors = validateRequestPayload(body)
+    if (Object.keys(errors).length > 0) throw new ApiError(422, { errors })
+
+    const now = new Date().toISOString()
+    r.requestor_name = body.requestor_name.trim()
+    r.title = body.title.trim()
+    r.vendor_name = body.vendor_name.trim()
+    r.vendor_vat_id = body.vendor_vat_id.trim()
+    r.department = body.department.trim()
+    r.commodity_group_id = body.commodity_group_id ?? null
+    r.total_cost = body.total_cost
+    r.updated_at = now
+    // Order lines are re-keyed rows (the backend would replace them the same
+    // way). The uploaded document's provenance (source) is kept as it is —
+    // an edit never re-attaches the paper trail.
+    r.order_lines = body.order_lines.map((line, i) => ({
+      id: `${r.id}l${db.counters.line++}`,
+      position: i + 1,
+      position_description: line.position_description.trim(),
+      unit_price: line.unit_price,
+      amount: line.amount,
+      unit: line.unit.trim(),
+      total_price: line.total_price,
+    }))
+    persist()
+    return { request: requestView(r), status_history: r.status_history }
+  },
+
   'POST /requests/:id/status': async ({ params, body }) => {
     const user = requireUser()
     await latency()
@@ -518,11 +599,26 @@ const handlers = {
     await delay(500)
     onProgress?.('Reading document')
     await delay(400)
+    // The upload itself is kept, like the backend's uploads volume — even if
+    // extraction fails, the document stays attached to what becomes the draft.
+    let document_id = null
+    if (body.data) {
+      document_id = `d${db.counters.document++}`
+      db.documents.push({
+        id: document_id,
+        filename: body.filename ?? 'upload',
+        mime: body.mime ?? body.mimeType ?? 'application/octet-stream',
+        size: Math.round((body.data.length * 3) / 4),
+        data: body.data,
+      })
+      persist()
+    }
     const result = extractFromText(String(body.content ?? ''))
     await delay(300)
     if (result.layer === null) {
       return {
         ok: false,
+        document_id,
         detail: 'The document could not be read as text. Please enter the details manually.',
       }
     }
@@ -537,11 +633,19 @@ const handlers = {
     return {
       ok: true,
       layer: result.layer,
+      document_id,
       fields: result.fields,
       detected: result.detected,
       problems: [...result.problems],
       commodity_suggestion: suggestion.suggestion,
     }
+  },
+
+  'GET /documents/:id': async ({ params }) => {
+    requireUser()
+    const doc = (db.documents ?? []).find((d) => d.id === params.id)
+    if (!doc) throw new ApiError(404, 'Document not found.')
+    return { document: doc }
   },
 
   'POST /commodity/suggest': async ({ body }) => {
@@ -567,11 +671,14 @@ export async function call(method, path, { body, query, params, onProgress } = {
   let key = `${method} ${path}`
   let pathParams = {}
   if (!handlers[key]) {
-    // Path templates: /requests/:id and /requests/:id/status
-    const m = path.match(/^\/requests\/([^/]+)(\/status)?$/)
+    // Path templates: /requests/:id, /requests/:id/status, /documents/:id
+    let m = path.match(/^\/requests\/([^/]+)(\/status)?$/)
     if (m) {
       pathParams = { id: m[1] }
-      key = `${method === 'GET' ? 'GET' : 'POST'} /requests/:id${m[2] ?? ''}`
+      key = `${method} /requests/:id${m[2] ?? ''}`
+    } else if ((m = path.match(/^\/documents\/([^/]+)$/))) {
+      pathParams = { id: m[1] }
+      key = 'GET /documents/:id'
     }
   }
   const handler = handlers[key]

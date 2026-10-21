@@ -34,8 +34,11 @@ body {
   flex-direction: column;
 }
 
+/* The main area claims the full viewport below the nav — the footer then
+   lands below the fold instead of eating content space. */
 .app__main {
   flex: 1;
+  min-height: calc(100vh - var(--nav-height));
 }
 
 .app__footer {
@@ -114,10 +117,20 @@ body {
 
 /* ---- navigation (inverted band) --------------------------------------- */
 
+/* Fixed nav height so the main area can claim exactly the rest of the
+   viewport; the footer then lives below the fold. */
+:root {
+  --nav-height: 80px;
+}
+
 .nav {
   background: var(--surface-inverted);
   color: var(--surface-on-inverted);
-  padding: var(--space-2) var(--container-gutter);
+  height: var(--nav-height);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--container-gutter);
 }
 
 .nav__inner {
@@ -126,7 +139,6 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-7);
-  padding: 12px 0;
 }
 
 .nav__brand {
@@ -172,6 +184,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  margin-left: auto; /* push user + sign-out to the far right */
   white-space: nowrap;
 }
 
@@ -202,6 +215,7 @@ body {
 
 @media (max-width: 720px) {
   .nav {
+    height: auto; /* the stack may wrap — let it grow */
     padding-inline: 16px;
   }
   .nav__inner {
@@ -746,7 +760,7 @@ datalist {
 
 .extract__mark {
   width: 16px;
-  color: #010203;
+  color: var(--surface-on-page);
 }
 
 .extract__field--ok .extract__mark {
@@ -1101,47 +1115,57 @@ th.num {
   font-size: var(--font-size-sm);
 }
 
+/*
+ * Status trail, laid out horizontally as a strip under the request header.
+ * Each entry carries its marker; a muted arrow separates consecutive
+ * entries — no connector line.
+ */
 .history {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
 .history__entry {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-2);
   position: relative;
-  padding-bottom: var(--space-5);
-}
-
-.history__entry:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 16px;
-  bottom: -2px;
-  width: 1px;
-  background: var(--text-border-min);
-}
-
-.history__marker {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--action-primary-bg);
-  border: 1px solid var(--text-border-min);
-  margin-top: 4px;
   flex: none;
 }
 
-.history__body {
-  min-width: 0;
+.history__entry:not(:last-child) {
+  padding-right: var(--space-7);
+}
+
+/* separator arrow, aligned with the marker row */
+.history__entry:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  top: 4px;
+  right: var(--space-2);
+  color: var(--text-border-min);
+  font-size: var(--font-size-ui);
+  line-height: 1;
+}
+
+.history__marker {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--action-primary-bg);
+  border: 1px solid var(--text-border-min);
+  margin-top: 7px;
+  flex: none;
 }
 
 .history__line {
   margin: 0;
   font-size: var(--font-size-ui);
   font-weight: 300;
+  white-space: nowrap;
 }
 
 .history__arrow {
@@ -1149,30 +1173,674 @@ th.num {
 }
 
 .history__meta {
-  margin: 2px 0 0;
   font-size: var(--font-size-sm);
   color: var(--text-border-min);
 }
 
-.history__comment {
-  margin: var(--space-1) 0 0;
-  font-family: var(--font-heading);
-  font-style: italic;
-  font-size: var(--font-size-micro);
-  font-weight: 200;
+/* ---- workbench (single-page, three panes) -------------------------------- */
+
+.workbench {
+  display: grid;
+  grid-template-columns: 1fr;
+  padding: 0 var(--container-gutter);
+  width: 100%;
 }
 
-.status-actions {
+.workbench__rail,
+.workbench__center,
+.workbench__side {
+  min-width: 0;
+  padding: var(--space-5) var(--space-6);
+}
+
+@media (min-width: 1160px) {
+  .workbench {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 380px);
+  }
+  /* While drafting — or editing an Open request — the form lives in the
+     extraction pane and gets the room; once the request is locked the pane
+     falls back to its usual width. */
+  .workbench--drafting:not(:has(.extraction__locked)) {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(380px, 520px);
+  }
+  /* Each pane reads and scrolls on its own. Panes claim everything below
+     the nav down to the viewport edge — the footer sits past the fold. */
+  .workbench__rail,
+  .workbench__center,
+  .workbench__side {
+    max-height: calc(100vh - var(--nav-height) - var(--space-2));
+    overflow-y: auto;
+  }
+  .workbench__rail {
+    border-right: 1px solid var(--text-border-min);
+    padding-left: 0;
+  }
+  .workbench__side {
+    border-left: 1px solid var(--text-border-min);
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 1159px) and (min-width: 721px) {
+  .workbench {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  }
+  .workbench__rail {
+    border-right: 1px solid var(--text-border-min);
+    padding-left: 0;
+  }
+  .workbench__side {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--text-border-min);
+  }
+}
+
+@media (max-width: 720px) {
+  .workbench {
+    padding-inline: 16px;
+  }
+  .workbench__center {
+    order: -1;
+    padding-inline: 0;
+  }
+  .workbench__rail,
+  .workbench__side {
+    padding-inline: 0;
+  }
+  .workbench__rail {
+    border-top: 1px solid var(--text-border-min);
+    margin-top: var(--space-6);
+  }
+  .workbench__side {
+    margin-top: var(--space-5);
+    border-top: 1px solid var(--text-border-min);
+  }
+}
+
+/* Left rail: list + add */
+
+.rail__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.rail__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-h6);
+  font-weight: 300;
+  letter-spacing: -0.1px;
+}
+
+.rail__search {
+  margin-bottom: var(--space-3);
+}
+
+.rail__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.rail__error {
+  margin: 0 0 var(--space-3);
+  color: #c03535;
+  font-size: var(--font-size-sm);
+}
+
+.rail__loading {
+  padding: var(--space-6) 0;
+}
+
+.rail__empty {
+  margin: var(--space-5) 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+}
+
+.rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.railitem {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--text-border-min);
+  border-radius: var(--radius-xs);
+  padding: var(--space-3) var(--space-2);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.railitem:hover {
+  background: var(--surface-raised);
+}
+
+.railitem--active {
+  background: var(--color-primary-100);
+}
+
+:root[data-theme='dark'] .railitem--active {
+  background: var(--color-primary-950);
+}
+
+.railitem__title {
+  font-size: var(--font-size-ui);
+  font-weight: 400;
+  color: var(--surface-on-page);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.railitem__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 300;
+  color: var(--text-muted);
+}
+
+.railitem__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.railitem__when {
+  font-size: var(--font-size-sm);
+  color: var(--text-border-min);
+}
+
+/* Draft form: the intake form living in the extraction pane (narrow), so the
+   wide form grids collapse to stacks. */
+
+.draftform {
+  /* the pane, not a 760px page column, is the width here */
+  max-width: none;
+}
+
+.draftform .grid--2 {
+  grid-template-columns: 1fr;
+}
+
+.draftform .totalrow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.draftform .totalrow .field {
+  width: 100%;
+}
+
+/* Order lines collapse into two stacked columns per line inside the pane. */
+.draftform .lines__head,
+.draftform .lines__row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.draftform .lines__cell--desc,
+.draftform .lines__cell--remove {
+  grid-column: 1 / -1;
+}
+
+/* Center pane: document view / draft form */
+
+.draftdoc__text {
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--text-border-min);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+}
+
+.docempty {
+  min-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.docempty__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-h3);
+  font-weight: 200;
+  letter-spacing: -0.3px;
+}
+
+.docempty__body {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+}
+
+.docview__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.docview__headtools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+.docview__tabs {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/*
+ * Full-height document view: the identity row and the status strip step
+ * aside, the tabs keep floating over the document's top-right corner, and
+ * pane padding tightens so the pages genuinely fill the pane.
+ */
+.docview--focus {
+  position: relative;
+}
+
+.docview--focus .docview__head {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 3;
+  margin-bottom: 0;
+  justify-content: flex-end;
+}
+
+.docview--focus .docview__eyebrow,
+.docview--focus .docview__headtools .pill,
+.docview--focus .docview__trail {
+  display: none;
+}
+
+.docview--focus .docview__expand {
+  background: var(--surface-page);
+}
+
+.docview--focus .pdfview__pages {
+  padding-top: var(--space-5);
+}
+
+/* the same toggle, one step cheaper: the pane cedes its padding */
+.workbench:has(.docview--focus) .workbench__center {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+/* Status trail: a slim strip between the header and the sheet */
+.docview__trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--text-border-min);
+  margin-bottom: var(--space-4);
+}
+
+.docview__traillabel {
+  font-size: var(--font-size-sm);
+  font-weight: 300;
+  color: var(--text-border-min);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: none;
+}
+
+.docview__trail .history {
+  flex: 1;
+  min-width: 0;
+}
+
+/* procurement controls share the same row */
+.docview__manage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.docview__manage .field__error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.docview__statuscomment {
+  flex: 1;
+  min-width: 180px;
+  height: 2.4em; /* single line; grows only where field-sizing is supported */
+  field-sizing: content;
+  max-height: 6em;
+}
+
+/* Uploaded document: rendered page by page on canvas (pdf.js) */
+
+.pdfview__file {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-border-min);
+}
+
+.pdfview__pages {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin: var(--space-4) 0;
+  /* `safe`: when a zoomed page outruns the pane, align to the start so the
+     overflow stays reachable by scrolling left; plain center as fallback. */
+  align-items: center;
+  align-items: safe center;
 }
 
-.status-closed-note {
-  margin: var(--space-3) 0 0;
+/* Zoomed in: let pages exceed the pane so the pane scrolls horizontally. */
+.pdfview__pages--zoomed .pdfpage {
+  max-width: none;
+}
+
+/* Toolbar floats above the scrolling pages and stays in view */
+.pdftools {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-page);
+  border: 1px solid var(--text-border-min);
+  border-radius: var(--radius-xl, 12px);
+  width: max-content;
+  max-width: 100%;
+}
+
+.pdftools__page,
+.pdftools__zoom {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  min-width: 4ch;
+  text-align: center;
+}
+
+.pdftools__sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--text-border-min);
+  margin: 2px 0;
+}
+
+.pdftools .chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pdfpage {
+  background: var(--color-white);
+  box-shadow: var(--shadow-elevated);
+  max-width: 100%;
+  height: auto;
+}
+
+.pdfview__download {
+  display: inline-block;
+  margin-top: var(--space-4);
+}
+
+.pdfview--loading {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdfview--missing {
+  min-height: 30vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid var(--text-border-min);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  color: var(--text-muted);
   font-size: var(--font-size-ui);
   font-weight: 300;
+  margin: 0;
+}
+
+.pdfview--missing p {
+  margin: 0;
+}
+
+.chip--small {
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+}
+
+.docview__eyebrow {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 300;
+  color: var(--text-border-min);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* The "paper": the request rendered as a document sheet */
+
+.sheet {
+  background: var(--surface-page);
+  border: 1px solid var(--text-border-min);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-elevated);
+  padding: var(--space-7) var(--space-8);
+  margin-bottom: var(--space-5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sheet {
+    box-shadow: none;
+    background: var(--surface-raised);
+  }
+}
+
+:root[data-theme='dark'] .sheet {
+  box-shadow: none;
+  background: var(--surface-raised);
+}
+
+.sheet__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-h3);
+  font-weight: 200;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+}
+
+.sheet__byline {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+  color: var(--text-muted);
+}
+
+.sheet__parties {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  border-top: 1px solid var(--text-border-min);
+  border-bottom: 1px solid var(--text-border-min);
+  margin: var(--space-6) 0 0;
+  padding: var(--space-5) 0;
+}
+
+.sheet__label {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  color: var(--text-border-min);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sheet__value {
+  margin: 0;
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+}
+
+.sheet__muted {
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  .sheet {
+    padding: var(--space-5);
+  }
+  .sheet__parties {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  /* Six columns don't fit a phone — let the table scroll inside the paper. */
+  .sheet__lines {
+    display: block;
+    overflow-x: auto;
+  }
+  .sheet__lines td,
+  .sheet__lines th {
+    white-space: nowrap;
+  }
+}
+
+.sheet__lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-5) 0;
+  font-size: var(--font-size-ui);
+}
+
+.sheet__lines th {
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  color: var(--text-border-min);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--text-border-min);
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+}
+
+.sheet__lines td {
+  border-bottom: 1px solid var(--surface-raised);
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  font-weight: 300;
+  vertical-align: top;
+}
+
+.sheet__lines th:last-child,
+.sheet__lines td:last-child {
+  text-align: right;
+  padding-right: 0;
+}
+
+.sheet__lines th.num,
+.sheet__lines td.num {
+  text-align: right;
+}
+
+.sheet__total {
+  margin: 0;
+  text-align: right;
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+  color: var(--text-muted);
+}
+
+.sheet__total strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-h6);
+  font-weight: 300;
+  color: var(--surface-on-page);
+  letter-spacing: -0.2px;
+}
+
+/* Right pane: extraction layer */
+
+.extraction__eyebrow {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 300;
+  color: var(--text-border-min);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.extraction__note {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-ui);
+  font-weight: 300;
+  color: var(--text-muted);
+}
+
+.extraction__idle,
+.extraction__loading {
+  padding: var(--space-5) 0;
+}
+
+.extraction__fileline {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono, 'Inter');
+  font-size: var(--font-size-ui);
+  font-weight: 400;
+  word-break: break-all;
+}
+
+.extraction .extract,
+.extraction .card--panel {
+  padding: var(--space-5);
+}
+
+.extraction .extract {
+  /* a follow-on (the draft form) must not sit flush under the panel */
+  margin-bottom: var(--space-6);
+}
+
+.extraction__locked {
   color: var(--text-muted);
 }
 

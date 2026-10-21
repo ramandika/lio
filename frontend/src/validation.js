@@ -14,7 +14,7 @@ import { parseMoney } from './utils/money'
 const VAT_RE = /^DE[0-9]{9}$/
 
 /**
- * @param {object} form  raw form state (see views/NewRequest.jsx)
+ * @param {object} form  raw form state (see components/DraftForm.jsx)
  * @returns {object} map of fieldKey → message (keyed `order_lines.<i>.<field>`)
  */
 export function validateForm(form) {

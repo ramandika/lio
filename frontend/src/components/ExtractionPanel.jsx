@@ -16,7 +16,7 @@ const DETECTED_FIELDS = [
   ['total_cost', 'Total Cost'],
 ]
 
-export default function ExtractionPanel({ onExtracted }) {
+export default function ExtractionPanel({ onExtracted, onReset }) {
   const fileInput = useRef(null)
   const [phase, setPhase] = useState('idle') // idle | working | done | failed
   const [progress, setProgress] = useState('')
@@ -31,6 +31,7 @@ export default function ExtractionPanel({ onExtracted }) {
     setResult(null)
     setFailDetail(null)
     let content = ''
+    let data = null
     try {
       content = await file.text()
     } catch {
@@ -39,14 +40,34 @@ export default function ExtractionPanel({ onExtracted }) {
       return
     }
     try {
+      // Original file along for storage: the mock keeps it where the backend
+      // would keep the upload (uploads volume → GET /documents/:id).
+      data = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+    } catch {
+      data = null
+    }
+    try {
       const res = await extraction.submit(
-        { filename: file.name, mimeType: file.type, content },
+        { filename: file.name, mimeType: file.type, content, data },
         setProgress,
       )
       if (res.ok) {
-        setResult(res)
+        // The file rides along so the draft's center pane can show it (the
+        // backend keeps the upload and serves it via GET /documents/:id).
+        const payload = {
+          ...res,
+          filename: file.name,
+          dataUrl: data,
+          isPdf: /\.pdf$/i.test(file.name) || file.type === 'application/pdf',
+        }
+        setResult(payload)
         setPhase('done')
-        onExtracted(res)
+        onExtracted(payload)
       } else {
         setFailDetail(res.detail ?? 'Extraction failed.')
         setPhase('failed')
@@ -64,12 +85,14 @@ export default function ExtractionPanel({ onExtracted }) {
 
   return (
     <div className="extract card card--panel">
-      <div className="extract__head">
-        <h3 className="extract__title">Have a Vendor Offer?</h3>
-        <p className="extract__standfirst">
-          Upload it and this form fills itself — you review every value before submitting.
-        </p>
-      </div>
+      {phase !== 'done' && (
+        <div className="extract__head">
+          <h3 className="extract__title">Have a Vendor Offer?</h3>
+          <p className="extract__standfirst">
+            Upload it and this form fills itself — you review every value before submitting.
+          </p>
+        </div>
+      )}
 
       {(phase === 'idle' || phase === 'failed') && (
         <div
@@ -87,7 +110,7 @@ export default function ExtractionPanel({ onExtracted }) {
           <button type="button" className="btn btn--primary" onClick={() => fileInput.current?.click()}>
             Upload Offer
           </button>
-          <span className="extract__hint">…or drag a .txt file here (PDF needs the full stack)</span>
+          <span className="extract__hint">…or drag a file here (.txt, .csv, .pdf)</span>
         </div>
       )}
 
@@ -137,6 +160,7 @@ export default function ExtractionPanel({ onExtracted }) {
             onClick={() => {
               setPhase('idle')
               setResult(null)
+              onReset?.()
             }}
           >
             Upload a different document

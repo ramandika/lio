@@ -1,4 +1,4 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
@@ -17,23 +17,6 @@ export default function NavBar() {
         <Link to={user ? '/' : '/login'} className="nav__brand" aria-label="askLio home">
           askLio
         </Link>
-        <nav className="nav__links" aria-label="Main">
-          {user && user.role === 'requestor' && (
-            <NavLink to="/requests" className={navClass}>
-              My Requests
-            </NavLink>
-          )}
-          {user && user.role !== 'requestor' && (
-            <NavLink to="/requests" className={navClass}>
-              Requests
-            </NavLink>
-          )}
-          {user && (
-            <NavLink to="/requests/new" className={navClass}>
-              New Request
-            </NavLink>
-          )}
-        </nav>
         <div className="nav__actions">
           <button
             type="button"
@@ -66,8 +49,4 @@ export default function NavBar() {
       </div>
     </header>
   )
-}
-
-function navClass({ isActive }) {
-  return `nav__link${isActive ? ' nav__link--active' : ''}`
 }
