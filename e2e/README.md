@@ -51,3 +51,11 @@ CYPRESS_BASE_URL=http://localhost:8020 npm run cy:run
 | J4 — commodity suggestion | — | to do |
 | J5 — overview status & history | — | to do |
 | J6 — persistence across restarts | — | to do |
+
+Beyond the journeys, an authorization suite pins the boundary rules in the UI:
+`authz-procurement.cy.js` (procurement sees all and manages status),
+`authz-documents.cy.js` (requestors reach only their own uploads) and
+`authz-locked.cy.js` (nothing already In Progress is editable by anyone — the
+lock renders for requestor, procurement and admin alike; the boundary itself
+rejects any `PUT` on a non-Open request with 409, `frontend/src/api/mock/server.js`).
+All passing.
