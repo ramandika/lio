@@ -6,19 +6,20 @@ The README allows local deployment; this document describes how the app runs and
 
 Prerequisites:
 
-- Runtime for the chosen stack (e.g. Node.js or Python + the front-end toolchain)
-- An OpenAI API key (provided by askLio) — used only for offer extraction and commodity suggestion
+- Docker with the Compose plugin — the whole stack (API + front-end + SQLite) runs in one container
+- An LLM API key (provided by askLio) — used only for offer extraction and commodity suggestion; optional
 
-Run steps (placeholders to be filled with the concrete commands of the implementation):
+Run steps:
 
 ```bash
-# 1. Install dependencies
-# 2. Set the API key
-export OPENAI_API_KEY="sk-…"
-# 3. Start the stack (back-end API + front-end, or a single combined process)
+# 1. Create .env from the sample and set the API key (optional — AI degrades cleanly without it)
+cp .env.example .env
+# 2. Build and start the stack
+docker compose up -d --build
+# 3. The app is at http://localhost:8020
 ```
 
-- The application is reachable at the printed local URL; SQLite/embedded storage means no database server is needed.
+- `docker compose` is the canonical way to run the environment; the SQLite database (`/data/uploads/app.db`) and the uploads live in a named volume (`lio-interview_uploads`) that survives rebuilds.
 - First start seeds nothing automatically; requests are created through the UI.
 
 ## Configuration

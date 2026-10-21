@@ -168,6 +168,8 @@ With the capability to submit requests, the procurement department requires a sy
 
 - [Project Plan](docs/PROJECT_PLAN.md) — scope, workstreams, milestones, risks
 - [Architecture](docs/ARCHITECTURE.md) — system design and data model
+- [Login Architecture](docs/LOGIN_ARCHITECTURE.md) — accounts, roles, sessions, auth flows
+- [Design System](docs/DESIGN.md) — lio.ai-derived design language, tokens, components (see `design/`)
 - [Commodity Groups](docs/COMMODITY_GROUPS.md) — reference list for classification
 - [Testing Strategy](docs/TESTING.md) — test layers and fixtures
 - [E2E Testing](docs/E2E_TESTING.md) — browser-driven user journeys (J1–J6)

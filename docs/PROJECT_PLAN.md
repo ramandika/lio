@@ -38,11 +38,21 @@ Done when: a user can fill the form, see validation errors, save, and see the re
 | Goal | User uploads a vendor offer document; the request form auto-fills. |
 | Input | PDF/text offer document (see sample in README). |
 | Output | Vendor name, VAT ID, requestor department, order lines, total cost. |
-| Approach | LLM-based extraction (OpenAI API key provided), structured output, with a deterministic pre/post-processing layer. |
+| Approach | **Two-layer composite**: deterministic parsing first, LLM as a measured fallback (details below). |
 | Review step | Extraction results are **pre-filled, not submitted** — the user reviews and corrects before saving. |
 | Fallback | Fields the extractor cannot find are left blank for manual entry; the user is told which fields were not detected. |
 
-Done when: uploading the README sample offer produces the "Extracted Information" block shown there, and the pre-filled form is editable.
+Extraction pipeline (composite, not LLM-first):
+
+| Layer | What | Cost |
+|-------|------|------|
+| L1 | Text extraction (PyMuPDF, text layer) + deterministic label/line parsing, followed by schema & math validation per line and for totals, VAT ID format, required fields | 0 — in-process, milliseconds, zero LLM calls |
+| Trigger | Validation fails (line math mismatch, VAT format, missing required fields) or detection confidence is low | 0 |
+| L2 | LLM extraction (structured output, temperature 0, ≤2 re-prompts) over the raw document text; result passes the same validators before reaching the UI | LLM calls on triggered cases only |
+
+The trigger is **validation-based, not confidence-scored**: in a procurement offer, line math, VAT format and required-field presence are cheap deterministic signals of failure — a cleaner gate than OCR self-confidence, which is unreliable for per-field fallback judgment. In-distribution documents (README-style offers) should resolve at L1; L2 exists for unseen formats, where the LLM remains a suggestion that the same validators re-check. Both layers feed the same review step, so the user is the safety net that L1 alone cannot be.
+
+Done when: uploading the README sample offer produces the "Extracted Information" block shown there (resolved at L1, zero LLM calls), an unseen-format offer triggers L2 and still yields a validated extraction, and the pre-filled form is editable.
 
 ### WS3 — Commodity group suggestion
 
@@ -80,6 +90,58 @@ Done when: changing a status produces a permanent history entry, and the history
 3. **M3** — Offer upload + extraction + auto-fill (WS2).
 4. **M4** — Commodity group suggestion (WS3).
 5. **M5** — Tests, polish, docs, deployment (WS5).
+
+## Stack decisions
+
+| Layer | Choice |
+|-------|--------|
+| Back-end | FastAPI with **PostgreSQL** (not SQLite), Python package in `app/` (routers, services, schemas, commodity list). |
+| Task queue | **None** — document extraction runs in-process (async handlers, bounded timeout, UI progress + manual-entry degradation). Celery is deliberately not used: the user waits for the pre-filled form anyway, and a broker + worker stack contradicts the one-command local deployment. Upgrade path if ever needed: `202 {job_id}` + in-process task store + polling endpoint; a broker is added only for needs like horizontal scaling or scheduled retries. |
+| Database | PostgreSQL as a dedicated compose service (`db`), data in a named volume (`postgres-data`); the app connects via `DATABASE_URL`. |
+| Front-end | **React + Vite**, source in a standalone `frontend/` directory; FastAPI serves the built output (`frontend/dist`). No server-side templating. |
+| Design tokens | `design/tokens.css` stays the single source and is imported/bundled by Vite. |
+| E2E testing | **Cypress** (supersedes the Playwright default in E2E_TESTING.md; journeys J1–J6 stay unchanged). Tests live in `e2e/`, run against the real stack; LLM mocked by config. |
+| CI | **GitHub Actions** (`ubuntu-latest`, public repo → free runners). |
+
+Planned layout:
+
+```
+frontend/            React + Vite source (package.json, vite.config.js, src/, dist/)
+app/                 FastAPI package (main, config, db, schemas, commodity, auth,
+                     routers/ requests·extraction·status·commodity,
+                     services/ document·llm·extraction·classifier)
+scripts/             seed/demo utilities
+design/              lio.ai tokens (served as-is, single source)
+```
+
+Frontend conventions agreed (not yet implemented):
+
+- No build tooling inside the Python image — `npm` runs only in the Docker build stage; requirements.txt stays frontend-free.
+- Validation lives at the API boundary; `frontend/src/validation.js` only mirrors the rules for inline UX.
+- LLM calls funnel through a single tier-aware wrapper in `app/services/llm.py` (on only when `LLM_TIER=on` and the key is set).
+
+Changes required at implementation time (currently deferred):
+
+1. `docker-compose.yml` → three services for dev: `db` (postgres, named volume `postgres-data`), `vite` (port 5173, `/api` proxied to the app), `app` (port 8020); the app serves `dist` for production-like runs. `uploads` volume keeps the uploaded offer files only — no DB inside it.
+2. `requirements.txt` → add `psycopg[binary]` (and SQLAlchemy/Alembic if the ORM/migration route is taken); remove nothing.
+3. Config: `DB_PATH` env var is replaced by `DATABASE_URL` (`postgresql+psycopg://…`); `.env.example` gets a matching entry.
+4. `app/db.py` → PostgreSQL connection + schema init (or Alembic migrations); numeric columns stored as `NUMERIC`, not floats.
+5. `Dockerfile` → multi-stage: `node:20-slim` stage runs `npm ci && npm run build`; the python stage copies `frontend/dist` in. (Needs no DB-specific change.)
+6. `.gitignore` → add `frontend/node_modules/` and `frontend/dist/`.
+7. `docs/DEPLOYMENT.md` → currently staged copy still says SQLite under `/data/uploads/app.db` as the canonical setup — must be rewritten before it is committed: Postgres service, `DATABASE_URL`, volume list, and the dev loop note (Node ≥ 18 only for out-of-Docker development).
+8. `static/` as a source directory disappears — it becomes build output only.
+9. `e2e/` directory at repo root: Cypress config + J1–J6 spec files + `sample-offer.txt` fixture; add `cypress` npm devDependency to `frontend/` (or a standalone `e2e/package.json` to keep the app build slim).
+10. `docs/E2E_TESTING.md` → replace the Playwright-default paragraph with Cypress as the chosen harness; journey specs carry over as-is (Cypress lacks WebKit — Chromium/Firefox/Electron is enough).
+
+### CI — GitHub Actions (`.github/workflows/ci.yml`)
+
+Three jobs on `ubuntu-latest`, all wired to the same compose stack:
+
+1. **backend** — checkout → `docker compose up -d db` (Postgres only) → set `DATABASE_URL` → run unit + API tests (`pytest`); no API key needed (offline suite).
+2. **frontend** — checkout → `actions/setup-node@v4` with `cache: npm` → `npm ci && npm run build` in `frontend/` (build itself is the lint gate; add `npm run lint` when configured).
+3. **e2e** — checkout → build the frontend image stage → `docker compose up -d` (db + app; app serves `dist`) → `cypress-io/github-action@v6` with `wait-on` pointing at the app's health endpoint → run J1–J6 against the real app with the LLM mock tier enabled via env (`LLM_TIER` fixture mode, no API key).
+
+Runner hygiene: cache `~/.cache/Cypress` between e2e runs (the binary download is the slowest step); `actions/upload-artifact` gated `if: failure()` for Cypress screenshots/videos so a red run is diagnosable without re-running; J6's "restart the application" step is implemented as a `cy.task` executing `docker compose restart app` (valid: the runner has Docker; the browser session survives, persistence is asserted).
 
 ## Key risks
 

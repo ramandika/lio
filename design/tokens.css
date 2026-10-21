@@ -1,0 +1,161 @@
+/*
+ * askLio design tokens
+ * Source: https://lio.ai (extracted with designlang, 2026-10-21)
+ * Cleaned from the raw export: duplicate neutral definitions merged,
+ * unresolved site variables dropped.
+ */
+
+:root {
+  /* ---- Brand ---- */
+  --color-primary: #bbddff;          /* lio.ai brand light blue */
+
+  /* Primary ramp (base: 200) */
+  --color-primary-50: #e4f8ff;
+  --color-primary-100: #d6edff;
+  --color-primary-200: #bbddff;
+  --color-primary-300: #a7c4e0;
+  --color-primary-400: #84a3c2;
+  --color-primary-500: #6685a4;
+  --color-primary-600: #526f8c;
+  --color-primary-700: #3f5973;
+  --color-primary-800: #32495f;
+  --color-primary-900: #273b4e;
+  --color-primary-950: #12202d;
+
+  /* Neutral ramp (base: 950) */
+  --color-neutral-50: #f5f5f5;
+  --color-neutral-100: #eaeaea;
+  --color-neutral-200: #d9d9d9;
+  --color-neutral-300: #c0c0c0;
+  --color-neutral-400: #9f9f9f;
+  --color-neutral-500: #828282;
+  --color-neutral-600: #6c6c6c;
+  --color-neutral-700: #575757;
+  --color-neutral-800: #464646;
+  --color-neutral-900: #393939;
+  --color-neutral-950: #1c1c1c;
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  /* ---- Semantic surfaces ---- */
+  /* Dominance on lio.ai: white 78%, black 21% — a flat, high-contrast scheme */
+  --surface-page: #ffffff;
+  --surface-on-page: #000000;        /* 21:1 AAA */
+  --surface-raised: #f0f0f0;
+  --surface-on-raised: #000000;      /* 18.43:1 AAA */
+  --surface-inverted: #010203;       /* dark panels / footer blocks */
+  --surface-on-inverted: #ffffff;
+
+  /* ---- Action ---- */
+  --action-primary-bg: #bbddff;
+  --action-primary-fg: #000000;      /* 14.9:1 AAA */
+  --action-secondary-bg: rgba(0, 0, 0, 0.2);
+  --action-secondary-fg: #000000;
+  --action-ghost-fg: rgba(255, 255, 255, 0.5);
+
+  /* ---- Text ---- */
+  --text-body: #000000;
+  --text-muted: #1c1c1c;
+  --text-border-min: #767676;        /* minimum-compliant border/label grey */
+  --text-link: #0000ee;              /* classic link blue used on lio.ai */
+
+  /* ---- Typography ----
+   * lio.ai families are licensed (Reckless Standard, STK Bureau Sans,
+   * ABC Diatype). Substitutions for this project:
+   *   Reckless Standard Light  -> Newsreader Light   (light serif display)
+   *   STK Bureau Sans          -> Inter              (grotesque UI sans)
+   *   ABC Diatype              -> Inter
+   */
+  --font-heading: 'Newsreader', 'Reckless Standard M-TRIAL Light', Georgia, serif;
+  --font-ui: 'Inter', 'STK Bureau Sans', 'ABC Diatype', system-ui, sans-serif;
+
+  /* Type scale (ratio 1.125 from 35px anchor) */
+  --font-size-h1: 64px;        /* weight 200 */
+  --font-size-title-1: 52px;   /* weight 200 */
+  --font-size-h2: 44px;        /* weight 200 */
+  --font-size-h3: 36px;        /* weight 200 */
+  --font-size-body: 35px;      /* weight 200 — landing hero scale */
+  --font-size-body-sm: 30px;   /* weight 200 */
+  --font-size-h5: 22px;        /* weight 300 */
+  --font-size-h6: 18px;        /* weight 300 */
+  --font-size-micro: 16px;     /* weight 400 */
+  --font-size-ui: 14px;        /* weight 300 — form controls on lio.ai */
+  --font-size-sm: 12px;        /* weight 400 — buttons, meta */
+
+  /* ---- Layout ---- */
+  --container-width: 1280px;
+  --container-gutter: 80px;
+  --section-rhythm: 80px;
+
+  /* Spacing scale */
+  --space-1: 1px;
+  --space-2: 8px;
+  --space-3: 10px;
+  --space-4: 15px;
+  --space-5: 20px;
+  --space-6: 28px;
+  --space-7: 38px;
+  --space-8: 44px;
+  --space-9: 61px;
+  --space-10: 80px;
+
+  /* ---- Shape ---- */
+  --radius-xs: 2px;    /* default control radius (surface.page style) */
+  --radius-md: 6px;    /* compact chip/button */
+  --radius-xl: 20px;   /* cards/panels */
+  --radius-full: 50px; /* pill buttons ("50px" button radius on lio.ai) */
+  --radius-round: 99px;
+
+  /* ---- Elevation ---- */
+  --shadow-inset: rgba(0, 0, 0, 0.08) 0px 1px 2px 0px,
+    rgb(255, 255, 255) 0px 0px 0px 1px inset;
+  --shadow-elevated: rgba(0, 0, 0, 0.12) 0px 3px 5px 0px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface-page: #010203;
+    --surface-on-page: #ffffff;
+    --surface-raised: #1c1c1c;
+    --surface-on-raised: #ffffff;
+    --surface-inverted: #ffffff;
+    --surface-on-inverted: #010203;
+
+    --action-primary-bg: #bbddff;
+    --action-primary-fg: #010203;
+    --action-secondary-bg: rgba(255, 255, 255, 0.2);
+    --action-secondary-fg: #ffffff;
+    --action-ghost-fg: rgba(255, 255, 255, 0.5);
+
+    --text-body: #ffffff;
+    --text-muted: #bbbbbb;
+    --text-border-min: #767676;
+    --text-link: #bbddff;
+
+    --shadow-inset: rgba(255, 255, 255, 0.08) 0px 1px 2px 0px,
+      rgba(0, 0, 0, 0.9) 0px 0px 0px 1px inset;
+  }
+}
+
+:root[data-theme='dark'] {
+  --surface-page: #010203;
+  --surface-on-page: #ffffff;
+  --surface-raised: #1c1c1c;
+  --surface-on-raised: #ffffff;
+  --surface-inverted: #ffffff;
+  --surface-on-inverted: #010203;
+
+  --action-primary-bg: #bbddff;
+  --action-primary-fg: #010203;
+  --action-secondary-bg: rgba(255, 255, 255, 0.2);
+  --action-secondary-fg: #ffffff;
+  --action-ghost-fg: rgba(255, 255, 255, 0.5);
+
+  --text-body: #ffffff;
+  --text-muted: #bbbbbb;
+  --text-border-min: #767676;
+  --text-link: #bbddff;
+
+  --shadow-inset: rgba(255, 255, 255, 0.08) 0px 1px 2px 0px,
+    rgba(0, 0, 0, 0.9) 0px 0px 0px 1px inset;
+}
