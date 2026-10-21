@@ -122,13 +122,13 @@ Frontend conventions agreed (not yet implemented):
 
 Changes required at implementation time (currently deferred):
 
-1. `docker-compose.yml` → three services for dev: `db` (postgres, named volume `postgres-data`), `vite` (port 5173, `/api` proxied to the app), `app` (port 8020); the app serves `dist` for production-like runs. `uploads` volume keeps the uploaded offer files only — no DB inside it.
-2. `requirements.txt` → add `psycopg[binary]` (and SQLAlchemy/Alembic if the ORM/migration route is taken); remove nothing.
-3. Config: `DB_PATH` env var is replaced by `DATABASE_URL` (`postgresql+psycopg://…`); `.env.example` gets a matching entry.
+1. ~~`docker-compose.yml` → `db` service~~ **done** (`postgres:17`, named volume `postgres-data`, healthcheck; `uploads` volume keeps the uploaded offer files only — no DB inside it). Remaining: add the `vite` dev service (port 5173, `/api` proxied to the app) when the frontend is bootstrapped; the app serves `dist` for production-like runs.
+2. ~~`requirements.txt` → add `psycopg[binary]`~~ **done** (`psycopg[binary]==3.2.3`); SQLAlchemy/Alembic stay open until the ORM/migration route is decided.
+3. ~~Config: `DATABASE_URL`~~ **done** — `DB_PATH` is dropped; compose sets `DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://lio:lio@db:5432/lio}` and `.env.example` documents the override.
 4. `app/db.py` → PostgreSQL connection + schema init (or Alembic migrations); numeric columns stored as `NUMERIC`, not floats.
 5. `Dockerfile` → multi-stage: `node:20-slim` stage runs `npm ci && npm run build`; the python stage copies `frontend/dist` in. (Needs no DB-specific change.)
 6. `.gitignore` → add `frontend/node_modules/` and `frontend/dist/`.
-7. `docs/DEPLOYMENT.md` → currently staged copy still says SQLite under `/data/uploads/app.db` as the canonical setup — must be rewritten before it is committed: Postgres service, `DATABASE_URL`, volume list, and the dev loop note (Node ≥ 18 only for out-of-Docker development).
+7. ~~`docs/DEPLOYMENT.md` rewrite~~ **done** — now documents the Postgres service, `DATABASE_URL`, and the two volumes (`postgres-data`, `uploads`).
 8. `static/` as a source directory disappears — it becomes build output only.
 9. `e2e/` directory at repo root: Cypress config + J1–J6 spec files + `sample-offer.txt` fixture; add `cypress` npm devDependency to `frontend/` (or a standalone `e2e/package.json` to keep the app build slim).
 10. `docs/E2E_TESTING.md` → replace the Playwright-default paragraph with Cypress as the chosen harness; journey specs carry over as-is (Cypress lacks WebKit — Chromium/Firefox/Electron is enough).

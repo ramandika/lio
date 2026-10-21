@@ -20,7 +20,7 @@ High-level design of the askLio procurement request system. Requirements are in 
 │  └─────┬──────┘  └──────┬──────┘             │              │
 │        │                └──── calls LLM ────┤              │
 │  ┌─────▼────────────────────────────────────▼───────────┐  │
-│  │ Persistence (RDBMS / SQLite locally)                 │  │
+│  │ Persistence (PostgreSQL via `db` service)            │  │
 │  │ requests · order_lines · status_history              │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -93,6 +93,6 @@ Fixed reference list of 50 groups across 8 categories, maintained in [COMMODITY_
 
 ## Non-functional notes
 
-- **Local deployment is fine** — the stack must start with one documented command and no cloud dependencies; SQLite or an equivalent embedded DB keeps this true.
+- **Local deployment is fine** — the stack must start with one documented command and no cloud dependencies; PostgreSQL runs as a dedicated compose service (`db`) with its data in a named volume, so one command still brings up the whole stack.
 - Secrets: the OpenAI API key is read from the environment, never committed.
 - Extraction calls are the only latency-sensitive path; the upload affordance shows progress and degrades to manual entry on failure.
