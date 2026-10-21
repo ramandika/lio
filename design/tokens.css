@@ -22,6 +22,9 @@
   --color-primary-900: #273b4e;
   --color-primary-950: #12202d;
 
+  /* Semantic warning cue — black text on this yellow is 14.9:1 AAA in both themes */
+  --color-warn: #ffd54a;
+
   /* Neutral ramp (base: 950) */
   --color-neutral-50: #f5f5f5;
   --color-neutral-100: #eaeaea;

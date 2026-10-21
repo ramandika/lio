@@ -24,13 +24,21 @@ export function Card({ className = '', ...props }) {
   return <section className={`card ${className}`} {...props} />
 }
 
-export function Field({ label, hint, error, htmlFor, className = '', children }) {
+export function Field({ label, hint, error, htmlFor, className = '', warn = false, children }) {
   return (
     <div className={`field ${error ? 'field--error' : ''} ${className}`}>
       {label && (
-        <label className="field__label" htmlFor={htmlFor}>
-          {label}
-        </label>
+        <span className="field__labelrow">
+          <label className="field__label" htmlFor={htmlFor}>
+            {label}
+          </label>
+          {/* LLM-extraction-only cue: the model scored the value low */}
+          {warn && (
+            <span className="tag tag--warn" title="The LLM was unsure of this value — verify it against the document.">
+              Low confidence
+            </span>
+          )}
+        </span>
       )}
       {children}
       {hint && !error && <p className="field__hint">{hint}</p>}

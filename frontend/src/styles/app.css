@@ -317,6 +317,24 @@ body {
   color: var(--surface-on-page);
 }
 
+/* Label + low-confidence tag row (warn prop) */
+.field__labelrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-2);
+}
+
+.field__labelrow .field__label {
+  margin: 0;
+}
+
+.field__labelrow .tag--warn {
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
 .field__hint {
   margin: var(--space-1) 0 0;
   font-size: var(--font-size-sm);
@@ -499,6 +517,13 @@ datalist {
 
 .tag--primary {
   background: var(--color-primary);
+  color: #010203;
+}
+
+/* Semantic warning — low-confidence marks. Same pairing both themes: */
+/* #ffd54a vs #010203 is 14.9:1, AAA. */
+.tag--warn {
+  background: var(--color-warn);
   color: #010203;
 }
 

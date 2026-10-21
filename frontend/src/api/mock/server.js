@@ -656,6 +656,8 @@ const handlers = {
       fields: result.fields,
       detected: result.detected,
       problems: [...result.problems],
+      confidences: result.confidences ?? {},
+      low_confidence: result.low_confidence ?? [],
       llm: result.llm ?? null,
       commodity_suggestion: suggestion.suggestion,
     }

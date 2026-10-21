@@ -134,7 +134,9 @@ export async function extractOffer({ content, images = [], onProgress } = {}) {
   const l1 = parseOffer(rawText)
   const l1Problems = validateExtraction(l1)
   if (l1Problems.size === 0) {
-    return { layer: 'L1', fields: l1, detected: detectMap(l1), problems: [] }
+    // Deterministic parse: no self-confidence is attached — the yellow
+    // low-confidence mark is an LLM-extraction-only concept.
+    return { layer: 'L1', fields: l1, detected: detectMap(l1), problems: [], low_confidence: [] }
   }
 
   // L2 — triggered only when L1 validation fails (validation-based gate,
@@ -167,14 +169,30 @@ export async function extractOffer({ content, images = [], onProgress } = {}) {
   const l2 = fused.fields
   // LLM output is a suggestion re-checked by the same validators; whatever
   // still fails is reported as "not detected" for manual entry.
+  //
+  // `confidences` is the model's per-field self-assessment (0–100, LLM
+  // extraction only). Fields it scored BELOW_LOW become `low_confidence` —
+  // the yellow "Low confidence" mark the draft form shows beside those
+  // fields. Deterministic L1 output gets none (nothing was uncertain there),
+  // and an unscored-but-present field is not flagged (no invented doubt).
+  const confidences = fused.confidences ?? {}
+  const present = detectMap(l2)
+  const low = Object.entries(confidences)
+    .filter(([key, score]) => present[key] && score < BELOW_THRESHOLD)
+    .map(([key]) => key)
   return {
     layer: 'L2',
     fields: l2,
-    detected: detectMap(l2),
+    detected: present,
     problems: [...validateExtraction(l2)],
+    confidences,
+    low_confidence: low,
     llm: fused.meta,
   }
 }
+
+/** Self-confidence below this (0–100) makes a field's value suspect. */
+const BELOW_THRESHOLD = 60
 
 function detectMap(fields) {
   const ok = (v) => v !== null && v !== undefined && v !== ''

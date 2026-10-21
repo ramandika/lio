@@ -64,6 +64,11 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
   const [submitting, setSubmitting] = useState(false)
   const [apiMessage, setApiMessage] = useState(null)
   const [source, setSource] = useState(() => (saved?.source ? { ...saved.source } : null)) // provenance
+  // LLM-extraction-only doubt: keys whose model confidence fell below the
+  // threshold (see extraction.js) get the yellow "Low confidence" mark until
+  // the user edits them — an edited value is reviewed by construction, and
+  // L1/manual/saved requests carry no model doubt at all.
+  const [lowKeys, setLowKeys] = useState([])
   const suggestToken = useRef(0)
   // Bumped when the apply-extraction effect changes the form underneath an
   // in-flight suggestion: the suggestion then recomputes from the new fields
@@ -124,9 +129,13 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
     [form.order_lines],
   )
 
-  const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }))
+  const setField = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }))
+    setLowKeys((keys) => keys.filter((k) => k !== key)) // the user reviewed it
+  }
 
   const setLineTotalFromLines = (lines) => {
+    setLowKeys((keys) => keys.filter((k) => k !== 'order_lines')) // edited lines are reviewed lines
     setForm((f) => {
       const complete = lines.length > 0 && lines.every((l) => (parseMoney(l.line_total) ?? 0) > 0)
       const next = { ...f, order_lines: lines }
@@ -135,7 +144,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
     })
   }
 
-  const onExtracted = ({ fields, layer, detected, filename, document_id, commodity_suggestion: suggestion }) => {
+  const onExtracted = ({ fields, layer, detected, low_confidence, filename, document_id, commodity_suggestion: suggestion }) => {
     const extractedLines = (fields.order_lines ?? []).map((l) => ({
       description: l.position_description ?? '',
       unit: l.unit || 'pieces',
@@ -170,6 +179,9 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
     }
     setSuggestionEpoch((e) => e + 1) // recompute the suggestion from the new fields
     setErrors({}) // field keys match, so stale inline errors disappear with the prefill
+    // Yellow marks only for the LLM's own doubts (extraction.js computes the
+    // keys; an L1 pull or a saved request yields none).
+    setLowKeys(Array.isArray(low_confidence) ? low_confidence : [])
   }
 
   const onSubmit = async (e) => {
@@ -228,7 +240,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
                 invalid={!!errors.requestor_name}
               />
             </Field>
-            <Field label="Department" htmlFor="f-department" error={errors.department}>
+            <Field label="Department" htmlFor="f-department" warn={lowKeys.includes('department')} error={errors.department}>
               <TextInput
                 id="f-department"
                 value={form.department}
@@ -261,7 +273,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
                 placeholder="e.g. Adobe Creative Cloud Subscription"
               />
             </Field>
-            <Field label="Vendor Name" htmlFor="f-vendor" error={errors.vendor_name}>
+            <Field label="Vendor Name" htmlFor="f-vendor" warn={lowKeys.includes('vendor_name')} error={errors.vendor_name}>
               <TextInput
                 id="f-vendor"
                 value={form.vendor_name}
@@ -273,6 +285,7 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
             <Field
               label="VAT ID (Umsatzsteuer-Identifikationsnummer)"
               htmlFor="f-vat"
+              warn={lowKeys.includes('vendor_vat_id')}
               hint="German format: DE followed by 9 digits."
               error={errors.vendor_vat_id}
             >
@@ -288,7 +301,14 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
         </Card>
 
         <Card className="block">
-          <h3 className="block__title">Order Lines</h3>
+          <h3 className="block__title">
+            Order Lines{' '}
+            {lowKeys.includes('order_lines') && (
+              <span className="tag tag--warn" title="The LLM was unsure of these lines — verify them against the document.">
+                Low confidence
+              </span>
+            )}
+          </h3>
           <OrderLinesEditor
             lines={form.order_lines}
             errors={errors}
@@ -313,7 +333,13 @@ export default function DraftForm({ extraction, initial = null, onDone, onLeave 
 
         <Card className="block block--foot">
           <div className="totalrow">
-            <Field label="Total Cost" htmlFor="f-total" className="field--inline" error={errors.total_cost}>
+            <Field
+              label="Total Cost"
+              htmlFor="f-total"
+              className="field--inline"
+              warn={lowKeys.includes('total_cost')}
+              error={errors.total_cost}
+            >
               <TextInput
                 id="f-total"
                 type="number"

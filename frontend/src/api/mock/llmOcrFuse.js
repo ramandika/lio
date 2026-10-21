@@ -222,14 +222,44 @@ function mapPayload(parsed) {
   return fields
 }
 
+/**
+ * The model's per-field self-confidence (0–100, top-level fields only).
+ * Only keys the model actually scored come through — an unscored field is
+ * not treated as low, so the UI never invents uncertainty. Line-level keys
+ * (if the model sends them) are dropped; lines are graded by the validators.
+ */
+const CONFIDENCE_KEYS = {
+  vendor_name: SCALAR_ALIASES.vendor_name,
+  vendor_vat_id: SCALAR_ALIASES.vendor_vat_id,
+  department: SCALAR_ALIASES.department,
+  total_cost: SCALAR_ALIASES.total_cost,
+  order_lines: ['order_lines', 'line_items', 'lines', 'items'],
+}
+
+function mapConfidences(parsed) {
+  const raw = ['confidences', 'confidence', 'confidence_scores', 'field_confidences']
+    .map((k) => parsed[k])
+    .find((v) => v !== null && typeof v === 'object' && !Array.isArray(v))
+  const out = {}
+  if (!raw) return out
+  for (const [key, aliases] of Object.entries(CONFIDENCE_KEYS)) {
+    const v = pick(raw, aliases)
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      out[key] = Math.max(0, Math.min(100, Math.round(v)))
+    }
+  }
+  return out
+}
+
 // ---------------------------------------------------------------------------
 // The flow — completion → validate → re-prompt ≤2 → best attempt, fail-soft.
 // ---------------------------------------------------------------------------
 
 /**
  * Extract the offer contract from a document with the LLM fuse.
- * Returns { ok: true, fields, meta } on a usable answer — fields already
- * mapped to the extraction contract (money in cents) — or
+ * Returns { ok: true, fields, confidences, meta } on a usable answer — fields
+ * already mapped to the extraction contract (money in cents), confidences the
+ * model's per-field self-assessment (0–100, may be empty) — or
  * { ok: false, reason } without throwing, so the caller can degrade to
  * manual entry. `text` is the page-marked document text; `images` optional
  * rendered page images as PNG data URIs (the fuse half of the method).
@@ -238,7 +268,7 @@ export async function extractOfferFuse({ text, images = [], onProgress } = {}) {
   const started = Date.now()
   const attemptsMeta = { model: MODEL_NAME, attempts: 0, n_retries: 0, tokens: null }
 
-  let best = null // { problems, fields }
+  let best = null // { problems, fields, confidences }
   let feedback = null
   let unreachable = null
 
@@ -293,8 +323,9 @@ export async function extractOfferFuse({ text, images = [], onProgress } = {}) {
     attemptsMeta.tokens = usage?.usage?.total_tokens ?? attemptsMeta.tokens
 
     const fields = mapPayload(parsed)
+    const confidences = mapConfidences(parsed)
     const arith = arithmeticProblems(fields)
-    if (best === null || arith.length < best.arith) best = { arith: arith.length, fields }
+    if (best === null || arith.length < best.arith) best = { arith: arith.length, fields, confidences }
     if (arith.length === 0) break
     feedback =
       'These checks against the extracted data failed:\n' +
@@ -313,7 +344,7 @@ export async function extractOfferFuse({ text, images = [], onProgress } = {}) {
 
   attemptsMeta.n_retries = Math.max(0, attemptsMeta.attempts - 1)
   attemptsMeta.wall_time = Math.round((Date.now() - started) / 100) / 10
-  return { ok: true, fields: best.fields, meta: attemptsMeta }
+  return { ok: true, fields: best.fields, confidences: best.confidences, meta: attemptsMeta }
 }
 
 /**

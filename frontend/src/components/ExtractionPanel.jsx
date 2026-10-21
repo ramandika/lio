@@ -136,12 +136,27 @@ export default function ExtractionPanel({ onExtracted, onReset }) {
           <ul className="extract__fields">
             {DETECTED_FIELDS.map(([key, label]) => {
               const ok = result.detected?.[key]
+              // Only LLM extraction carries self-doubt — L1 results are
+              // either found or not, never low-confidence.
+              const low = result.layer === 'L2' && (result.low_confidence ?? []).includes(key)
               return (
-                <li key={key} className={ok ? 'extract__field extract__field--ok' : 'extract__field extract__field--miss'}>
+                <li
+                  key={key}
+                  className={
+                    ok
+                      ? 'extract__field extract__field--ok'
+                      : 'extract__field extract__field--miss'
+                  }
+                >
                   <span className="extract__mark" aria-hidden="true">
                     {ok ? '✓' : '✕'}
                   </span>
                   {label}
+                  {ok && low && (
+                    <span className="tag tag--warn" title="The LLM was unsure of this value — verify it against the document.">
+                      Low confidence
+                    </span>
+                  )}
                   {!ok && <em>not detected — please enter manually</em>}
                 </li>
               )
