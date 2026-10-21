@@ -4,16 +4,16 @@ How the product is tested through the browser, as a real user experiences it. Th
 
 ## Tooling
 
-**Playwright** is the default choice (Chromium/Firefox/WebKit in one harness, auto-waiting, trace viewer). Any equivalent harness (Cypress) satisfies this document as long as the coverage below exists.
+**Cypress** is the chosen harness — it supersedes the Playwright default originally stated here (decision recorded in [PROJECT_PLAN.md](PROJECT_PLAN.md)); the journey specs below carry over unchanged. Cypress drives Chromium/Firefox/Electron (WebKit unsupported — irrelevant for this product), with auto-waiting, built-in screenshots/video on failure and readable run reports; element queries use Testing Library's accessible-name queries (`cy.findByRole`/`cy.findByLabelText`).
 
-- E2E tests live in `e2e/` (or `tests/e2e/`) at the repository root.
-- They run against the **running application**, started the same documented way users run it — E2E bootstraps the app itself, not a special test server with mocked data paths.
+- E2E tests live in `e2e/` (a standalone npm package, `cypress.config.js` at `e2e/`) at the repository root.
+- They run against the **running application**, started the same documented way users run it — E2E bootstraps the app itself, not a special test server with mocked data paths. Until the FastAPI request endpoints land, the documented run is `npm run dev` in `frontend/` (in-browser mock API); when the real stack serves the app, `CYPRESS_BASE_URL` points the suite at it and the journeys stay unchanged.
 - The **back-end is real** (the same local DB/API the app ships with); only the LLM is mocked at the boundary, see [Test doubles](#test-doubles).
 
 ## Principles
 
 1. **Test the flows the README describes, from the outside.** Click, type, upload, and assert what a user sees — not internal state.
-2. **No implementation details in selectors.** Use accessible names, labels, roles, and visible text (`playwright` role/label selectors), which also keeps the suite validating accessibility basics.
+2. **No implementation details in selectors.** Use accessible names, labels, roles, and visible text (`cy.findByRole`/`cy.findByLabelText` accessible-name queries), which also keeps the suite validating accessibility basics.
 3. **One journey per test.** Each test performs a full user journey; no hidden coupling between tests. Runs are independent and order-insensitive.
 4. **Deterministic seed data.** Every run starts from a known database state; tests create their own requests and clean up via a per-worker data prefix rather than depending on each other.
 
@@ -144,10 +144,13 @@ A small optional shard of "live-AI" journeys (same journeys, real API key, opt-i
 
 ```bash
 # start the app in test mode (seeded DB + LLM mocks)
+cd frontend && npm run dev        # http://localhost:5173 — the documented run until the FastAPI request endpoints land
+
 # run the E2E suite
+cd ../e2e && npm run cy:run       # headless; `npm run cy:open` to debug
 ```
 
-Exactly two commands, both filled in with the concrete stack commands [DEPLOYMENT.md](DEPLOYMENT.md) documents. Traces/screenshots on failure are enabled and land in the E2E report so a red run is diagnosable without repeating it.
+Exactly two commands; `CYPRESS_BASE_URL` retargets the suite (e.g. the composed FastAPI app at `http://localhost:8020`). Traces/screenshots on failure are enabled and land in the E2E report so a red run is diagnosable without repeating it. The per-journey status table lives in [e2e/README.md](../e2e/README.md).
 
 ## Definition of done for E2E
 

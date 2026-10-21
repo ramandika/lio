@@ -5,3 +5,6 @@ uploads/
 .env
 frontend/node_modules/
 frontend/dist/
+e2e/node_modules/
+e2e/cypress/screenshots/
+e2e/cypress/videos/

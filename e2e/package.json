@@ -1,0 +1,15 @@
+{
+  "name": "asklio-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cypress E2E journeys (J1-J6) for askLio — standalone so the app build stays slim (docs/PROJECT_PLAN.md).",
+  "scripts": {
+    "cy:open": "cypress open --e2e",
+    "cy:run": "cypress run --e2e",
+    "test": "cypress run --e2e"
+  },
+  "devDependencies": {
+    "@testing-library/cypress": "^10.0.0",
+    "cypress": "^14.5.0"
+  }
+}
