@@ -21,13 +21,25 @@ docker compose up -d --build
 
 - `docker compose` is the canonical way to run the environment; the two named volumes survive rebuilds: `lio-interview_postgres-data` (the database) and `lio-interview_uploads` (uploaded offer files only — no DB inside it).
 - The app connects via `DATABASE_URL` (default `postgresql+psycopg://lio:lio@db:5432/lio`, overridable in `.env`) and waits for the `db` healthcheck before starting.
-- First start seeds nothing automatically; requests are created through the UI.
+- First start seeds the demo accounts (`SEED_USERS`, see [LOGIN_ARCHITECTURE.md](LOGIN_ARCHITECTURE.md)) and the three demo requests; requests are then created through the UI.
+
+### Dev profile vs production profile
+
+- `docker-compose.yml` — the dev profile. Source (`app/`, `scripts/`, `static/`, `tests/`) is bind-mounted and uvicorn runs with `--reload`; code changes need no rebuild.
+- `docker-compose.prod.yml` — the production profile. The multi-stage [Dockerfile](../Dockerfile) builds the SPA in a Node stage and bakes `frontend/dist` into the Python image, so the image is self-contained: no source bind-mounts, no `--reload`, the db port is not published, and the app container gets a `/health`-based healthcheck. It uses its own compose project (`lio-prod`), so it can run beside the dev stack without touching its containers or volumes:
+
+  ```bash
+  docker compose -f docker-compose.prod.yml up -d --build   # APP_PORT=… to move off 8020
+  docker compose -f docker-compose.prod.yml down           # keep volumes; add -v to drop data
+  ```
+
+  The app serves the built SPA and the API on the same origin (`/` the workbench, `/api/*` the routers); deep links like `/login` fall back to the SPA shell. In the dev profile the same happens once `frontend/dist` exists locally — in the prod profile the build always produces it.
 
 ## Configuration
 
 | Setting | Source | Default |
 |---------|--------|---------|
-| `OPENAI_API_KEY` | Environment variable | none — AI features disabled with a clear message if absent |
+| `LLM_API_KEY` + `LLM_TIER=on` | Environment variable | none — AI features disabled; extraction degrades to manual entry (docker-compose.yml is the source of truth for variable names) |
 | `DATABASE_URL` | Environment variable (`DATABASE_URL` in compose) | `postgresql+psycopg://lio:lio@db:5432/lio` |
 | Port | Environment variable | conventional default for the stack |
 

@@ -24,7 +24,7 @@ export function Card({ className = '', ...props }) {
   return <section className={`card ${className}`} {...props} />
 }
 
-export function Field({ label, hint, error, htmlFor, className = '', warn = false, children }) {
+export function Field({ label, hint, error, htmlFor, className = '', warn = false, confidence = null, children }) {
   return (
     <div className={`field ${error ? 'field--error' : ''} ${className}`}>
       {label && (
@@ -32,10 +32,22 @@ export function Field({ label, hint, error, htmlFor, className = '', warn = fals
           <label className="field__label" htmlFor={htmlFor}>
             {label}
           </label>
-          {/* LLM-extraction-only cue: the model scored the value low */}
+          {/* LLM-extraction-only cues: the model's self-scored per-field confidence
+              (its low end as the yellow mark), never shown for L1/manual/saved values. */}
           {warn && (
-            <span className="tag tag--warn" title="The LLM was unsure of this value — verify it against the document.">
-              Low confidence
+            <span
+              className="tag tag--warn"
+              title="The LLM was unsure of this value — verify it against the document."
+            >
+              Low confidence{confidence != null ? ` · ${confidence}%` : ''}
+            </span>
+          )}
+          {!warn && confidence != null && (
+            <span
+              className="tag tag--neutral"
+              title="This value was extracted by the LLM — its self-reported confidence."
+            >
+              AI · {confidence}%
             </span>
           )}
         </span>

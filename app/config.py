@@ -2,6 +2,7 @@
 (which is the source of truth). Read once at import; process-local."""
 
 import os
+from pathlib import Path
 
 def db_dsn() -> str:
     """psycopg 3 wants a plain URL; `postgresql+psycopg://` (the compose /
@@ -22,7 +23,7 @@ SEED_USERS = os.getenv(
     ",".join(
         [
             "Ana Weber:ana@example.com:requestor",
-            "Tom Richter:tom@example.com:requestor",
+            "Tom Richter:tom@example.com:procurement",
             "Kim Schneider:kim@example.com:procurement",
             "Sam Admin:admin@example.com:admin",
         ]
@@ -47,3 +48,20 @@ SESSION_COST = 12  # bcrypt cost (LOGIN_ARCHITECTURE.md: >= 12)
 # Login rate limiting — plain in-process counters, no Redis (LOGIN_ARCHITECTURE.md).
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 15 * 60
+
+# --- LLM tier -------------------------------------------------------------
+# The one funnel (app/services/llm.py): the tier is on only when
+# LLM_TIER=on AND the key is set (CLAUDE.md architecture decision) —
+# without it extraction degrades to L1 + manual entry, no crash.
+LLM_TIER = os.environ.get("LLM_TIER", "off").strip().lower()
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+# OpenAI-compatible endpoint (compose default: host.docker.internal:11444).
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://host.docker.internal:11444").rstrip("/")
+LLM_MODEL = os.environ.get("LLM_MODEL", "glm-5.3-flash")
+LLM_TIMEOUT_S = _int_env("LLM_TIMEOUT_S", 240)
+
+# --- uploads volume ---------------------------------------------------------
+# Uploaded offer documents land here (compose `uploads` volume → /data/uploads,
+# dev/tests can override); the DB row points at the file, the bytes never go
+# into Postgres.
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "/data/uploads"))

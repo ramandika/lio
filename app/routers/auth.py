@@ -24,7 +24,9 @@ from ..auth import (
 )
 from ..db import connect
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+# Every API route lives under /api — the frontend transport's same-origin
+# BASE (frontend/src/api/http.js), no proxy rewrite in any environment.
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Uniform failure for unknown user and bad password — no user enumeration.
 UNIFORM_FAILURE = "Invalid email or password."

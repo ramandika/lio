@@ -38,13 +38,14 @@ services:
       # LLM proxy (askLio-extracted runs against an OpenAI-compatible endpoint).
       # The tier is on only when LLM_TIER=on AND LLM_API_KEY is set; without it,
       # manual entry and deterministic parsing still work.
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11444}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11444/v1}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_TIER: ${LLM_TIER:-off}
+      LLM_MODEL: ${LLM_MODEL:-glm-5.3-flash}
       APPROVAL_THRESHOLD: ${APPROVAL_THRESHOLD:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://lio:lio@db:5432/lio}
       # Demo accounts seeded on boot (LOGIN_ARCHITECTURE.md); password `demo`.
-      SEED_USERS: ${SEED_USERS:-Ana Weber:ana@example.com:requestor,Tom Richter:tom@example.com:requestor,Kim Schneider:kim@example.com:procurement,Sam Admin:admin@example.com:admin}
+      SEED_USERS: ${SEED_USERS:-Ana Weber:ana@example.com:requestor,Tom Richter:tom@example.com:procurement,Kim Schneider:kim@example.com:procurement,Sam Admin:admin@example.com:admin}
       SESSION_IDLE_TTL: ${SESSION_IDLE_TTL:-}
     depends_on:
       db:

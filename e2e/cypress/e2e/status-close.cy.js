@@ -11,18 +11,18 @@
  * a mover only for a transition the boundary allows, and once Closed the
  * mover disappears — so no invalid transition is clickable in the UI. What
  * the boundary answers a stale screen (two tabs of Kim, a superseded sheet)
- * is asserted against the exported transition rule the mock enforces and the
- * sheet mirrors (frontend/src/api/mock/server.js, validateTransition).
+ * is asserted against the real API: POST /api/requests/:id/status refusing
+ * the unreachable moves with the enriched refusals.
  */
 
 describe('Close Request — the move to Closed confirms as “Approved”', () => {
   beforeEach(() => {
-    cy.resetAppData() // back to the shipped seed — r1 In Progress, r2 Open, r3 Closed
+    cy.resetAppData() // back to the seeded demo state — r1 In Progress, r2 Open, r3 Closed
   })
 
   it('kim closes the In Progress request and reads back exactly “Approved”', () => {
     cy.signIn('kim@example.com')
-    cy.visit('/?selected=r1')
+    cy.seededId('r1').then((id) => cy.visit(`/?selected=${id}`))
 
     cy.findByRole('button', { name: 'Close Request' }).click()
 
@@ -47,7 +47,7 @@ describe('Close Request — the move to Closed confirms as “Approved”', () =
 
   it('an Open move reads the same one-word shape — “In Progress”', () => {
     cy.signIn('kim@example.com')
-    cy.visit('/?selected=r2')
+    cy.seededId('r2').then((id) => cy.visit(`/?selected=${id}`))
 
     cy.findByRole('button', { name: 'Move to “In Progress”' }).click()
 
@@ -60,7 +60,7 @@ describe('Close Request — the move to Closed confirms as “Approved”', () =
 
   it('a Closed request offers no move at all — and the boundary refusal is enriched', () => {
     cy.signIn('kim@example.com')
-    cy.visit('/?selected=r3')
+    cy.seededId('r3').then((id) => cy.visit(`/?selected=${id}`))
 
     // No mover is rendered for Closed — the UI simply has nothing to click,
     // and no stale comment box to send an invalid transition from.
@@ -68,21 +68,42 @@ describe('Close Request — the move to Closed confirms as “Approved”', () =
     cy.findByRole('button', { name: /^Move to / }).should('not.exist')
     cy.findByLabelText(/^Comment \(kept in the history\)/).should('not.exist')
 
-    // Boundary-level (not UI-reachable): what POST /requests/:id/status
+    // Boundary-level (not UI-reachable): what POST /api/requests/:id/status
     // answers a stale session trying to close an already-Closed request —
     // the refusal names why: the chain has ended, nothing may follow it.
-    cy.window()
-      .then((win) => win.eval('import("/src/api/mock/server.js")'))
-      .then((mock) => {
-        cy.wrap(mock.validateTransition('Closed', 'Closed'))
-          .should('contain', 'A request in “Closed” cannot move to “Closed”')
-          .and('contain', 'Open → In Progress → Closed')
-        // Off-chain skips are refused with the reachable status named.
-        cy.wrap(mock.validateTransition('Open', 'Closed'))
-          .should('contain', 'cannot move to “Closed”')
-          .and('contain', 'it may only move to “In Progress”')
-        // The chain's real moves stay clean of a refusal.
-        cy.wrap(mock.validateTransition('In Progress', 'Closed')).should('be.null')
+    const staleStatus = (id, newStatus) =>
+      // Kim's session cookie rides cy.request, and the refusal shape is the
+      // API's own (422, {detail: problem}) — no UI affordance would send it.
+      cy.request({
+        method: 'POST',
+        url: `/api/requests/${id}/status`,
+        body: { new_status: newStatus },
+        failOnStatusCode: false,
       })
+
+    cy.seededId('r3').then((r3) =>
+      staleStatus(r3, 'Closed').then((res) => {
+        expect(res.status).to.eq(422)
+        expect(res.body.detail).to.contain('A request in “Closed” cannot move to “Closed”')
+        expect(res.body.detail).to.contain('Open → In Progress → Closed')
+      }),
+    )
+
+    // Off-chain skips are refused with the reachable status named.
+    cy.seededId('r2').then((r2) =>
+      staleStatus(r2, 'Closed').then((res) => {
+        expect(res.status).to.eq(422)
+        expect(res.body.detail).to.contain('cannot move to “Closed”')
+        expect(res.body.detail).to.contain('it may only move to “In Progress”')
+      }),
+    )
+
+    // An unknown status name is a plain validation refusal.
+    cy.seededId('r3').then((r3) =>
+      staleStatus(r3, 'Cancelled').then((res) => {
+        expect(res.status).to.eq(422)
+        expect(res.body.detail).to.contain('Unknown status “Cancelled”.')
+      }),
+    )
   })
 })

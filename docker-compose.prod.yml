@@ -1,0 +1,55 @@
+# Production profile of docker-compose.yml: same db + app topology, but the
+# image is self-contained (multi-stage Dockerfile builds and bakes the SPA),
+# so there are no source bind-mounts and no --reload. Run with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+name: lio-prod
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: lio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lio}
+      POSTGRES_DB: lio
+    # No host port: prod clients reach the app only; the app reaches the db
+    # over the compose network. (DB_PORT stays a dev-compose convenience.)
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lio -d lio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: lio-interview-app
+    ports:
+      - "${APP_PORT:-8020}:8000"
+    volumes:
+      - uploads:/data/uploads
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11444/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_TIER: ${LLM_TIER:-off}
+      LLM_MODEL: ${LLM_MODEL:-glm-5.3-flash}
+      APPROVAL_THRESHOLD: ${APPROVAL_THRESHOLD:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://lio:lio@db:5432/lio}
+      SEED_USERS: ${SEED_USERS:-Ana Weber:ana@example.com:requestor,Tom Richter:tom@example.com:procurement,Kim Schneider:kim@example.com:procurement,Sam Admin:admin@example.com:admin}
+      SESSION_IDLE_TTL: ${SESSION_IDLE_TTL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # /health needs no auth; the container healthcheck rides on it.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  postgres-data:

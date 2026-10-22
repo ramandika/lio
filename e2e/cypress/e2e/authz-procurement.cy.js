@@ -33,7 +33,8 @@ describe('Procurement authorization — Kim sees every request and manages statu
     cy.findByLabelText(/Title \/ Short Description/).type(title)
 
     cy.findByRole('button', { name: 'Submit Request' }).click()
-    cy.url().should('match', /selected=r\d+/)
+    // The backend assigns UUID ids to created requests.
+    cy.url().should('match', /selected=[0-9a-f-]+/)
     // Ana's own view of her upload — she may read it.
     cy.contains('.pdfview', 'sample-offer.txt').should('be.visible')
     cy.location('search').then((search) => {

@@ -1,0 +1,23 @@
+# The image copies only app/, scripts/, requirements*.txt and the dist built
+# in stage 1 — everything else stays out of the build context (and out of the
+# image): dev/tests/e2e artifacts are bind-mounted or run from the host, and
+# frontend/{node_modules,dist} are rebuilt inside the frontend stage.
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.prod.yml
+
+frontend/node_modules
+frontend/dist
+e2e/node_modules
+
+e2e
+tests
+docs
+samples
+static
+
+*.md
+LICENSE

@@ -134,8 +134,8 @@ body {
 }
 
 .nav__inner {
-  max-width: calc(var(--container-width) + 2 * var(--container-gutter));
-  margin: 0 auto;
+  flex: 1; /* span the nav so brand sits left, actions right */
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-7);
@@ -258,6 +258,11 @@ body {
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Single-button footers (e.g. Save Changes on a saved request): span the row */
+.btn--block {
+  width: 100%;
 }
 
 .btn--primary {
@@ -460,6 +465,20 @@ datalist {
 
 .totalrow__sum strong {
   font-weight: 500;
+}
+
+/* Save confirmation, sitting right above the submit/save buttons */
+.footnote {
+  margin: var(--space-5) 0 0;
+  font-size: var(--font-size-micro);
+}
+
+.footnote--saved {
+  color: var(--color-primary-800);
+  background: var(--color-primary-50);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  display: inline-block;
 }
 
 /* ---- banners / tags -------------------------------------------------------- */
@@ -941,6 +960,12 @@ datalist {
   margin: var(--space-1) 0 0;
   font-size: var(--font-size-sm);
   color: var(--text-border-min);
+}
+
+.commodity__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-5);
 }
 
 /* ---- toolbar / overview table ------------------------------------------------------ */

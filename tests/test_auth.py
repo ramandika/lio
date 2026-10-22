@@ -23,6 +23,11 @@ from tests.conftest import connect
 @pytest.fixture(autouse=True)
 def clean_db():
     with connect() as conn:
+        # Request tables first — they reference users (created_by).
+        conn.execute("DELETE FROM request_lines")
+        conn.execute("DELETE FROM status_history")
+        conn.execute("DELETE FROM requests")
+        conn.execute("DELETE FROM documents")
         conn.execute("DELETE FROM sessions")
         conn.execute("DELETE FROM users")
     _FAILED.clear()
@@ -38,7 +43,7 @@ def client():
 
 
 def login(c: TestClient, email: str, password: str = "demo"):
-    return c.post("/auth/login", json={"email": email, "password": password})
+    return c.post("/api/auth/login", json={"email": email, "password": password})
 
 
 def test_login_success_and_me(client):
@@ -56,14 +61,14 @@ def test_login_success_and_me(client):
     assert "HttpOnly" in res.headers["set-cookie"]
     assert "SameSite=lax" in res.headers["set-cookie"]
 
-    me = client.get("/auth/me")
+    me = client.get("/api/auth/me")
     assert me.status_code == 200
     assert me.json()["user"]["email"] == "ana@example.com"
 
 
 def test_seed_roles(client):
     assert login(client, "admin@example.com").status_code == 200
-    me = client.get("/auth/me")
+    me = client.get("/api/auth/me")
     assert me.json()["user"]["role"] == "admin"
 
 
@@ -76,19 +81,19 @@ def test_wrong_password_uniform_failure(client):
 
 
 def test_me_requires_session(client):
-    res = client.get("/auth/me")
+    res = client.get("/api/auth/me")
     assert res.status_code == 401
 
 
 def test_logout_revokes_session(client):
     assert login(client, "kim@example.com").status_code == 200
-    assert client.get("/auth/me").status_code == 200
-    client.post("/auth/logout")
-    assert client.get("/auth/me").status_code == 401
+    assert client.get("/api/auth/me").status_code == 200
+    client.post("/api/auth/logout")
+    assert client.get("/api/auth/me").status_code == 401
 
 
 def test_logout_without_session_clears_cookie(client):
-    res = client.post("/auth/logout")
+    res = client.post("/api/auth/logout")
     assert res.status_code == 200
 
 
@@ -130,7 +135,7 @@ def test_disabled_account_cannot_login(client):
 def test_seed_is_idempotent(client):
     first = login(client, "ana@example.com")
     assert first.status_code == 200
-    client.post("/auth/logout")
+    client.post("/api/auth/logout")
     _FAILED.clear()
     with TestClient(app) as again:  # re-run lifespan (init_db + seed_users)
         assert login(again, "ana@example.com").status_code == 200
@@ -139,11 +144,11 @@ def test_seed_is_idempotent(client):
 def test_overlong_inputs_get_uniform_401(client):
     long_email = "A" * (MAX_EMAIL_LENGTH + 1)
     long_pw = "P" * (MAX_PASSWORD_LENGTH + 1)
-    assert client.post("/auth/login", json={"email": long_email, "password": "x"}).json()["detail"] == UNIFORM_FAILURE
-    assert client.post("/auth/login", json={"email": "ana@example.com", "password": long_pw}).json()["detail"] == UNIFORM_FAILURE
+    assert client.post("/api/auth/login", json={"email": long_email, "password": "x"}).json()["detail"] == UNIFORM_FAILURE
+    assert client.post("/api/auth/login", json={"email": "ana@example.com", "password": long_pw}).json()["detail"] == UNIFORM_FAILURE
     # And the overlong email must not have been admitted as a rate-limit key.
     assert not client.post(
-        "/auth/login", json={"email": "A" * 500, "password": "x"}
+        "/api/auth/login", json={"email": "A" * 500, "password": "x"}
     ).status_code == 429
 
 

@@ -3,7 +3,7 @@ import { ApiError, documents as documentsApi, requests as requestsApi } from '..
 import { useAuth } from '../context/AuthContext'
 import PdfPages from './PdfPages'
 import { formatMoney } from '../utils/money'
-import { COMMODITY_BY_ID } from '../api/mock/commodity'
+import { COMMODITY_BY_ID } from '../data/commodity'
 import {
   StatusPill,
   Banner,

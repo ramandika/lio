@@ -13,14 +13,24 @@ const RUN_PREFIX = `E2E ${new Date().toISOString().slice(0, 19).replace(/[:T-]/g
 
 Cypress.Commands.add('runPrefix', () => RUN_PREFIX)
 
+/** Seeded request ids — the backend's fixed demo UUIDs (app/seed.py).
+ * r1 Adobe — In Progress · r2 Standing Desks — Open · r3 Insurance — Closed. */
+const SEEDED_REQUEST_IDS = {
+  r1: '00000000-0000-4000-8000-000000000001',
+  r2: '00000000-0000-4000-8000-000000000002',
+  r3: '00000000-0000-4000-8000-000000000003',
+}
+Cypress.Commands.add('seededId', (name) => SEEDED_REQUEST_IDS[name])
+
 /**
- * Start each test from a clean slate: the shipped app keeps its state in
- * browser storage (see frontend/src/api/mock/server.js), so wiping both
- * seeded accounts' storage is this app's "seeded throwaway DB". The real
- * backend will swap this for a test-database reset; journeys stay unchanged.
+ * Start each test from a known state: request/document rows and uploaded
+ * files are wiped, then the demo seed re-applied — inside the app container
+ * (e2e_reset.py, wired to the `db:reset` task in cypress.config.js). Users
+ * and sessions stay; journeys sign in through the login form.
  */
 Cypress.Commands.add('resetAppData', () => {
-  cy.clearLocalStorage() // includes asklio.mockdb.v2 and the session token
+  cy.task('db:reset', { timeout: 60_000 })
+  cy.clearLocalStorage() // the theme toggle and any per-viewer conveniences
 })
 
 /**
@@ -42,14 +52,4 @@ Cypress.Commands.add('signIn', (email = 'ana@example.com', password = 'demo') =>
  */
 Cypress.Commands.add('openNewRequest', () => {
   cy.findByRole('button', { name: '+ Add Request' }).click()
-})
-/**
- * Flip the mock's LLM tier off — the in-browser stand-in for the real stack's
- * LLM_TIER=off deployment switch (mock/llmOcrFuse.js). Session storage rides
- * this tab's session, so it outlives the signIn navigation; the mock reads
- * it per extraction call. Used by journeys that exercise the documented
- * manual-entry degradation.
- */
-Cypress.Commands.add('disableAi', () => {
-  cy.window().then((win) => win.sessionStorage.setItem('asklio.llm_tier', 'off'))
 })

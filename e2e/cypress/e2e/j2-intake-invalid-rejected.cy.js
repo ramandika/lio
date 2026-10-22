@@ -110,7 +110,7 @@ describe('J2 — Intake: invalid submission is rejected', () => {
 
     submit()
 
-    cy.url().should('match', /selected=r\d+/)
+    cy.url().should('match', /selected=[0-9a-f-]+/) // the backend assigns UUID ids
     cy.findAllByRole('button', {
       name: new RegExp(`${title}[\\s\\S]*${VALID.vendor}[\\s\\S]*€1,500\\.00`),
     })

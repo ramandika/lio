@@ -6,10 +6,10 @@
  * two-layer composite is honest about its layers: the README verbatim offer
  * resolves at L1 deterministically (zero LLM calls — the documented L1
  * design point), while an unseen offer format triggers L2 — the
- * llm_ocr_fuse extraction against the local OpenAI-compatible server
- * (no API key). Its negative variants cover the partial document (missing
- * totals stay flagged "not detected") and the AI-unavailable degradation to
- * manual entry.
+ * llm_ocr_fuse extraction against the configured OpenAI-compatible endpoint
+ * (compose LLM_BASE_URL). Its negative variants cover the partial document
+ * (missing totals stay flagged "not detected") and the AI-unavailable
+ * degradation to manual entry.
  */
 
 // The L2 variants run live against the local LLM server — whole-journey
@@ -73,7 +73,7 @@ function assertCommoditySuggestion() {
   // viewport, so it is scrolled into view first (the visible state a user
   // would reach by scrolling).
   cy.contains('h3', 'Commodity Group').scrollIntoView().should('be.visible')
-  cy.findByText('High Confidence').should('be.visible')
+  cy.findByText(/High Confidence/).should('be.visible')
   cy.contains('Information Technology · Software').should('be.visible')
 }
 
@@ -83,7 +83,8 @@ function assertSavedRequest(title, unit = 'pieces') {
   // also appear in the nav bar). `unit` null means "whatever the document
   // stated" — asserted non-empty only.
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // titles carry "("…
-  cy.url().should('match', /selected=r\d+/)
+  // The backend assigns UUID ids to created requests.
+  cy.url().should('match', /selected=[0-9a-f-]+/)
   const overviewRow = cy.findByRole('button', {
     name: new RegExp(
       `${esc(title)}[\\s\\S]*${esc(OFFER.vendor)}[\\s\\S]*€\\s?2,100\\.00`,
@@ -150,6 +151,16 @@ function assertSavedRequest(title, unit = 'pieces') {
 
 describe('J3 — Offer upload → auto-fill → submit', () => {
   let prefix
+  // The LLM tier is an environment switch on the backend (LLM_TIER — no
+  // per-session toggle on the real stack). The L2 journeys run only in an
+  // LLM_TIER=on deployment; the manual-entry degradation only in an
+  // LLM_TIER=off one — each variant skips in the other, keeping the suite
+  // meaningful in either setup (e2e/README.md "Running").
+  let tier
+
+  before(() => {
+    cy.task('llm:tier').then((t) => (tier = t))
+  })
 
   beforeEach(() => {
     cy.resetAppData()
@@ -179,7 +190,9 @@ describe('J3 — Offer upload → auto-fill → submit', () => {
     assertSavedRequest(title, 'pieces')
   })
 
-  it('extracts an unseen offer format via the LLM fuse (L2)', () => {
+  it('extracts an unseen offer format via the LLM fuse (L2)', function () {
+    if (tier !== 'on') return this.skip()
+
     // An offer in a layout L1's label parser cannot read → the LLM fuse does
     // the extraction and the same validators re-check every value.
     uploadOffer('cypress/fixtures/sample-offer-alternate-format.txt')
@@ -199,7 +212,9 @@ describe('J3 — Offer upload → auto-fill → submit', () => {
     assertSavedRequest(title, 'pieces')
   })
 
-  it('keeps missing totals blank and flagged, so the user completes the request', () => {
+  it('keeps missing totals blank and flagged, so the user completes the request', function () {
+    if (tier !== 'on') return this.skip()
+
     // Partial document variant: the offer states no grand total — the LLM
     // must report the absence (missing ≠ missed), the field stays blank and
     // flagged, and manual entry completes a still-valid request.
@@ -222,11 +237,12 @@ describe('J3 — Offer upload → auto-fill → submit', () => {
     assertSavedRequest(title, null)
   })
 
-  it('degrades to manual entry with a clear message when the AI is unavailable', () => {
-    // AI-unavailable variant: the LLM tier is off (the mock's stand-in for
-    // the documented LLM_TIER=off deployment) — the UI says so and the user
-    // can still complete the request without it.
-    cy.disableAi()
+  it('degrades to manual entry with a clear message when the AI is unavailable', function () {
+    if (tier === 'on') return this.skip() // no per-request switch — env LLM_TIER gates it
+
+    // AI-unavailable variant: the LLM tier is off (the documented
+    // LLM_TIER=off deployment) — the UI says so and the user can still
+    // complete the request without it.
     const title = `${prefix} — Licenses (manual entry)`
     uploadOffer('cypress/fixtures/sample-offer-alternate-format.txt')
     cy.findByRole('alert').should('contain.text', 'enter the details manually')

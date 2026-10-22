@@ -65,7 +65,7 @@ describe('J1 — Intake: create and submit a valid request', () => {
 
     // 6a. A commodity group was suggested — never chosen by the user: no
     // selection was made, the suggestion appeared on its own.
-    cy.findByText('High Confidence').should('be.visible')
+    cy.findByText(/High Confidence/).should('be.visible')
     // The headline renders "category · name" across spans — match by the
     // element's full text content.
     cy.contains('Information Technology · Software').should('be.visible')
@@ -75,7 +75,8 @@ describe('J1 — Intake: create and submit a valid request', () => {
 
     // 5. Confirmation: the saved request opens as a document, and it appears
     // in the overview with status "Open", correct title, vendor and total.
-    cy.url().should('match', /selected=r\d+/)
+    // The backend assigns UUID ids to created requests.
+    cy.url().should('match', /selected=[0-9a-f-]+/)
     const overviewRow = cy.findByRole('button', {
       name: new RegExp(`${title}[\\s\\S]*${offer.vendor}[\\s\\S]*${offer.total}`),
     })

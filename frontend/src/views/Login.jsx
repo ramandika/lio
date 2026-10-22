@@ -6,6 +6,8 @@ import { Field, TextInput, Btn } from '../components/ui'
 
 const DEMO_ACCOUNTS = [
   { email: 'ana@example.com', label: 'Requestor' },
+  { email: 'tom@example.com', label: 'Procurement' },
+  { email: 'pranamulia@example.com', label: 'Requestor' },
   { email: 'kim@example.com', label: 'Procurement' },
   { email: 'admin@example.com', label: 'Admin' },
 ]

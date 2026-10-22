@@ -128,8 +128,8 @@ The suite stays fast and deterministic by mocking exactly one dependency:
 
 | Dependency | E2E behavior | How |
 |------------|-------------|-----|
-| Back-end API + DB | **Real** (until the FastAPI request endpoints land, the shipped frontend's in-browser mock API stands in for this) | The app under run, against a throwaway local DB |
-| OpenAI extraction/classification | **Mocked, with one live exception** | A fixture-driven LLM stand-in, selected by configuration at app start (e.g. response file per scenario), so journeys run without any API key. **J3's L2 variants are the exception:** they exercise the real `llm_ocr_fuse` against the local OpenAI-compatible server (`localhost:11444`, no API key) through the dev-server `/llm` proxy, per [PROJECT_PLAN.md, decision 15](PROJECT_PLAN.md) — so J3 partially refutes the "mocked" rule by running its unseen-format extraction on the real model and keeping the deterministic L1/AI-off variants offline. Once the backend lands, its server-side LLM comes back under the fixture/mock rule; the L1 `VITE_LLM_TIER=off` variants always run without it. |
+| Back-end API + DB | **Real** (the composed FastAPI app at `http://localhost:8020`, serving the built SPA) | The app under run, against the compose Postgres (reset to the seeded demo state before each test) |
+| OpenAI extraction/classification | **Live, tier-gated** | The backend's server-side `llm_ocr_fuse` (`app/services/llm.py`) runs only in an `LLM_TIER=on` deployment (key set, OpenAI-compatible `LLM_BASE_URL` from compose). J3's two L2 journey variants gate on it and run live against the configured endpoint; the deterministic L1 variant never calls it, and the manual-entry degradation variant runs only when the tier is off — either way the suite is meaningful without any real key being required. |
 
 This split mirrors [TESTING.md](TESTING.md): deterministic product behavior end-to-end; the LLM's own quality lives in the unit-layer tests with recorded fixtures.
 
@@ -137,20 +137,20 @@ A small optional shard of "live-AI" journeys (same journeys, real API key, opt-i
 
 ## Data management
 
-- **Seed & teardown:** every worker gets a database namespace (e.g. suffixed request titles) and wipes its own rows after its journey. Nothing assumes pre-existing application data beyond the commodity-group reference list and the status taxonomy.
+- **Seed & teardown:** every test starts from the seeded demo state — the `db:reset` task runs `scripts/e2e_reset.py` inside the app container (wipes request/document rows and the uploads volume, re-applies the demo seed) — and titles its created requests with a run-unique prefix, so repeated runs never collide; nothing is torn down after the journey. Nothing assumes pre-existing application data beyond the commodity-group reference list and the status taxonomy.
 - **Fixtures:** `sample-offer.txt` lives with the E2E tests and is the README's vendor offer verbatim, so a failure immediately points at a requirement.
 
 ## Running
 
 ```bash
-# start the app in test mode (seeded DB + LLM mocks)
-cd frontend && npm run dev        # http://localhost:5173 — the documented run until the FastAPI request endpoints land
+# start the real stack (db + FastAPI app serving the built SPA)
+docker compose up -d              # http://localhost:8020
 
 # run the E2E suite
-cd ../e2e && npm run cy:run       # headless; `npm run cy:open` to debug
+cd e2e && npm run cy:run          # headless; `npm run cy:open` to debug
 ```
 
-Exactly two commands; `CYPRESS_BASE_URL` retargets the suite (e.g. the composed FastAPI app at `http://localhost:8020`). Traces/screenshots on failure are enabled and land in the E2E report so a red run is diagnosable without repeating it. The per-journey status table lives in [e2e/README.md](../e2e/README.md).
+Exactly two commands; `CYPRESS_BASE_URL` retargets the suite (e.g. the Vite dev server at `http://localhost:5173`). Screenshots on failure are enabled and land in the E2E report so a red run is diagnosable without repeating it. The per-journey status table lives in [e2e/README.md](../e2e/README.md).
 
 ## Definition of done for E2E
 

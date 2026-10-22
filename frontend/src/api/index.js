@@ -1,24 +1,29 @@
 /*
- * API facade — the only module views may import for data access. Today it
- * delegates to the in-browser mock (api/mock/server.js); when the FastAPI
- * backend lands, only this file changes (see api/http.js for the target
- * transport). Its method surface mirrors the documented REST API:
+ * API facade — the only module views may import for data access. The mock
+ * transport is DORMANT: nothing from api/mock/ (or the pdf.js stand-ins)
+ * executes unless `useMock` is flipped true for an offline demo. With
+ * `useMock = false` everything runs over the live HTTP transport
+ * (api/http.js — same-origin `/api`, session cookies, multipart extraction).
+ * Method surface mirrors the documented REST API:
  *
  *   LOGIN_ARCHITECTURE.md  → auth.login / auth.logout / auth.me
  *   ARCHITECTURE.md §2     → requests.*, extraction, commodity.suggest
  */
 
-import * as mockServer from './mock/server'
-import { pdfToText, pdfPageImages } from '../utils/pdf'
+import * as http from './http'
 
-export { ApiError } from './mock/server'
+export { ApiError } from './ApiError'
 
-const useMock = true // flip once the real backend is wired up
+const useMock = false // flip true ONLY for the offline/mock demo (localStorage mockdb)
 
 async function call(method, path, opts) {
-  if (useMock) return mockServer.call(method, path, opts)
-  // Live transport goes here (fetch with credentials: 'include').
-  throw new Error('Live API transport not implemented yet')
+  if (useMock) {
+    // Dynamic import: the mock is loaded (and initializes its storage) only
+    // on this dormant branch — never during normal runs.
+    const mock = await import('./mock/server')
+    return mock.call(method, path, opts)
+  }
+  return http.call(method, path, opts)
 }
 
 const GET = (path, opts) => call('GET', path, opts)
@@ -42,46 +47,51 @@ export const requests = {
     POST(`/requests/${id}/status`, { body: { new_status: newStatus, comment } }),
 }
 
-/** Offer extraction. body: { filename, mimeType, content? , data? } */
+/** Offer extraction. input: { filename, mimeType, content? , data? } */
 export const extraction = {
   submit: async ({ filename, mimeType = '', content, data }, onProgress) => {
-    // The real backend sniffs/stores the MIME server-side; here the filename
-    // is authoritative (some browsers label PDFs application/octet-stream).
     if (/\.pdf$/i.test(filename)) mimeType = 'application/pdf'
-    // PDFs are read with PyMuPDF in the real backend; the mock reads them
-    // in-browser with pdf.js (utils/pdf.js) and runs the same L1/L2 pipeline
-    // on the text, with the rendered page images riding along for the L2
-    // fuse (llm_ocr_fuse). The original file travels along as a data URL so
-    // the mock can store it where the backend would keep it in the uploads
-    // volume.
-    let images = []
-    if (mimeType === 'application/pdf') {
-      try {
-        content = await pdfToText(data)
-      } catch (err) {
-        console.warn('pdf.js text extraction failed, degrading to manual entry:', err)
-        await new Promise((r) => setTimeout(r, 400))
-        return {
-          ok: false,
-          detail: 'The PDF could not be read in this browser build. The full stack reads PDFs with PyMuPDF — enter the details manually.',
+    if (useMock) {
+      // Mock-era path (dormant): PDFs are read in-browser with pdf.js (the
+      // PyMuPDF stand-in) and the parsed text rides along. With the live
+      // transport the original file goes to the backend verbatim (multipart)
+      // and PyMuPDF reads it server-side.
+      const { pdfToText, pdfPageImages } = await import('../utils/pdf.js')
+      let images = []
+      if (mimeType === 'application/pdf') {
+        try {
+          content = await pdfToText(data)
+        } catch (err) {
+          console.warn('pdf.js text extraction failed, degrading to manual entry:', err)
+          await new Promise((r) => setTimeout(r, 400))
+          return {
+            ok: false,
+            detail:
+              'The PDF could not be read in this browser build. The full stack reads PDFs with PyMuPDF — enter the details manually.',
+          }
+        }
+        try {
+          images = await pdfPageImages(data)
+        } catch (err) {
+          console.warn('pdf.js page rendering failed; the LLM fuse reads text only:', err)
+          images = []
         }
       }
-      try {
-        images = await pdfPageImages(data)
-      } catch (err) {
-        console.warn('pdf.js page rendering failed; the LLM fuse reads text only:', err)
-        images = []
-      }
+      return POST('/extraction', { body: { filename, mimeType, content, data, images }, onProgress })
     }
-    return POST('/extraction', { body: { filename, mimeType, content, data, images }, onProgress })
+    return http.extractionSubmit({ filename, mimeType, content, data }, onProgress)
   },
 }
 
-/** Uploaded offer documents. The real backend stores files in the uploads volume. */
+/** Uploaded offer documents. The backend stores files in the uploads volume. */
 export const documents = {
-  get: (id) => GET(`/documents/${id}`, {}),
+  get: (id) => call('GET', `/documents/${encodeURIComponent(id)}`, {}),
 }
 
 export const commodity = {
   suggest: (payload) => POST('/commodity/suggest', { body: payload }),
+  // The explicit re-run (the "Suggest from my entries" button): carries the
+  // currently assigned group + its confidence so the advice must be
+  // same-or-better to replace it (app/services/classifier.py policy).
+  resuggest: (payload) => POST('/commodity/resuggest', { body: payload }),
 }

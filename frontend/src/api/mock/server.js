@@ -17,20 +17,14 @@
  */
 
 import { extractOffer } from './extraction'
-import { suggestCommodity } from './classifier'
+import { suggestCommodity, resuggestCommodity } from './classifier'
 import { COMMODITY_BY_ID } from './commodity'
 import { SAMPLE_PDF_DATA_URL, SAMPLE_PDF_FILENAME } from './samplePdf'
 
 const STORAGE_KEY = 'asklio.mockdb.v2' // v2: requests carry an uploaded document (r1 ships one)
 const SESSION_KEY = 'asklio.mock.session'
 
-export class ApiError extends Error {
-  constructor(status, payload) {
-    super(typeof payload === 'string' ? payload : JSON.stringify(payload))
-    this.status = status
-    this.payload = typeof payload === 'string' ? { detail: payload } : payload
-  }
-}
+export { ApiError } from '../ApiError'
 
 const VAT_RE = /^DE[0-9]{9}$/
 
@@ -54,7 +48,7 @@ function seedDb() {
       id: 'u2',
       email: 'tom@example.com',
       password: 'demo',
-      role: 'requestor',
+      role: 'procurement',
       display_name: 'Tom Richter',
     },
     {
@@ -686,6 +680,11 @@ const handlers = {
     await delay(350 + Math.random() * 300)
     const { suggestion, candidates } = suggestCommodity(body ?? {})
     return { suggestion, candidates }
+  },
+
+  'POST /commodity/resuggest': async ({ body }) => {
+    await delay(350 + Math.random() * 300)
+    return resuggestCommodity(body ?? {})
   },
 }
 
